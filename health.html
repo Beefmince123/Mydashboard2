@@ -888,48 +888,6 @@ main {
   })();
   </script>
 
-  <div class="section-title">Daily Stack</div>
-
-  <div class="stack-card">
-    <div class="stack-ticker" id="stackTicker">
-      <span class="stack-ticker-dot"></span>
-      <span class="stack-ticker-label">STACK</span>
-      <span class="stack-ticker-sep">·</span>
-      <span class="stack-ticker-msg" id="stackTickerMsg">All caught up — keep it rolling</span>
-      <span class="stack-ticker-count" id="stackTickerCount">0/0</span>
-    </div>
-
-    <div class="stack-head">
-      <div class="sf-eyebrow">Daily stack</div>
-      <div class="sf-title">Tap each as you take it</div>
-      <div class="stack-progress-text" id="stackProgressText">— / — taken today · resets at 6 AM</div>
-    </div>
-
-    <div class="stack-progress-track">
-      <div id="stackProgressBar" class="stack-progress-fill"></div>
-    </div>
-
-    <div id="stackGroups"></div>
-
-    <div class="stack-add-wrap">
-      <div class="sf-eyebrow stack-add-label">Add to stack</div>
-      <div class="stack-add-row">
-        <div class="stack-name-wrap">
-          <input id="stackAddName" type="text" placeholder="Name (e.g. B-complex)" class="stack-input" autocomplete="off" spellcheck="false" />
-          <div id="stackSearchResults" class="stack-search-results" hidden></div>
-        </div>
-        <input id="stackAddDose" type="text" placeholder="Dose (e.g. 1 cap)" class="stack-input" />
-        <select id="stackAddWindow" class="stack-input stack-select">
-          <option value="morning">Morning</option>
-          <option value="lunch">Lunch</option>
-          <option value="evening">Evening</option>
-          <option value="anytime">Anytime</option>
-        </select>
-        <button id="stackAddBtn" class="stack-add-btn">+ Add</button>
-      </div>
-    </div>
-  </div>
-
   <section id="water" class="water-embed">
     <div class="section-title">Water Tracker</div>
     <iframe src="po-water.html" class="water-iframe" loading="lazy" title="Water Tracker"></iframe>
