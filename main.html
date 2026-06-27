@@ -595,6 +595,35 @@ body::after {
   .gm-card { padding: 16px; }
   .gm-progress-num { font-size: 36px; }
 }
+
+/* ===== Monthly Goals tabs ===== */
+.mg-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.mg-tab {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mg-tab:hover { color: var(--text-primary); }
+.mg-tab.mg-tab-active {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.10);
+  color: var(--text-primary);
+}
 </style>
 </head>
 <body>
@@ -689,6 +718,39 @@ body::after {
         <button type="button" id="tomorrowAddBtn"    class="gm-add">+ Add</button>
         <button type="button" id="tomorrowPolishBtn" class="gm-polish">✨ Polish</button>
         <div class="gm-status" id="tomorrowStatus"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONTHLY GOALS -->
+  <div class="section">
+    <div class="section-title">Monthly Goals</div>
+    <div class="gm-card" id="mgCard">
+      <div class="gm-header">
+        <div class="gm-header-left">
+          <div class="gm-eyebrow" id="mgMonthLabel"></div>
+          <div class="gm-progress-row">
+            <span class="gm-progress-num" id="mgDoneNum">0</span>
+            <span class="gm-progress-total" id="mgTotalNum">/ 0</span>
+            <span class="gm-progress-label" id="mgLabel">goals this month</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mg-tabs">
+        <button class="mg-tab mg-tab-active" id="mgTabActive" type="button">Active</button>
+        <button class="mg-tab" id="mgTabDone" type="button">Completed</button>
+      </div>
+
+      <ul class="goal-list" id="mgActiveList"></ul>
+      <div class="empty-state" id="mgActiveEmpty" style="display:none">No monthly goals yet — add one below.</div>
+
+      <ul class="goal-list" id="mgDoneList" style="display:none"></ul>
+      <div class="empty-state" id="mgDoneEmpty" style="display:none">Nothing completed yet this month.</div>
+
+      <div class="gm-input-wrap" id="mgInputWrap">
+        <input class="gm-input" id="mgInput" type="text" placeholder="Add a monthly goal…" autocomplete="off">
+        <button class="gm-add" id="mgAddBtn" type="button">+ Add</button>
       </div>
     </div>
   </div>
@@ -1296,19 +1358,173 @@ body::after {
     loadTomorrow
   );
 
+  // ====== Monthly Goals ======
+  function monthKey() {
+    const n = new Date();
+    return 'monthly_goals:' + n.getFullYear() + '-' + pad2(n.getMonth() + 1);
+  }
+  function getMonthlyGoals() {
+    const g = storeGet(monthKey());
+    return Array.isArray(g) ? g : [];
+  }
+  function setMonthlyGoals(list) {
+    try { localStorage.setItem(monthKey(), JSON.stringify(list)); } catch (e) {}
+  }
+  function mgMonthName() {
+    const n = new Date();
+    return ['January','February','March','April','May','June','July','August','September','October','November','December'][n.getMonth()] + ' ' + n.getFullYear();
+  }
+
+  let mgActiveTab = true; // true = active, false = completed
+
+  function renderMonthlyGoals() {
+    const goals = getMonthlyGoals();
+    const active = goals.filter(g => !g.done);
+    const done   = goals.filter(g => g.done);
+
+    document.getElementById('mgMonthLabel').textContent = mgMonthName();
+    document.getElementById('mgDoneNum').textContent  = done.length;
+    document.getElementById('mgTotalNum').textContent = '/ ' + goals.length;
+    document.getElementById('mgLabel').textContent    = goals.length === 1 ? 'goal this month' : 'goals this month';
+
+    const activeList  = document.getElementById('mgActiveList');
+    const activeEmpty = document.getElementById('mgActiveEmpty');
+    const doneList    = document.getElementById('mgDoneList');
+    const doneEmpty   = document.getElementById('mgDoneEmpty');
+    const inputWrap   = document.getElementById('mgInputWrap');
+
+    if (mgActiveTab) {
+      activeList.style.display  = '';
+      doneList.style.display    = 'none';
+      doneEmpty.style.display   = 'none';
+      inputWrap.style.display   = '';
+      activeList.innerHTML = '';
+      if (active.length === 0) {
+        activeEmpty.style.display = 'block';
+      } else {
+        activeEmpty.style.display = 'none';
+        active.forEach(goal => {
+          const origIdx = goals.indexOf(goal);
+          activeList.appendChild(buildMgRow(goal, origIdx));
+        });
+      }
+    } else {
+      activeList.style.display  = 'none';
+      activeEmpty.style.display = 'none';
+      inputWrap.style.display   = 'none';
+      doneList.style.display    = '';
+      doneList.innerHTML = '';
+      if (done.length === 0) {
+        doneEmpty.style.display = 'block';
+      } else {
+        doneEmpty.style.display = 'none';
+        done.forEach(goal => {
+          const origIdx = goals.indexOf(goal);
+          doneList.appendChild(buildMgRow(goal, origIdx));
+        });
+      }
+    }
+  }
+
+  function buildMgRow(goal, origIdx) {
+    const li = document.createElement('li');
+    li.className = 'gm-row' + (goal.done ? ' gm-row-done' : '');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'gm-check';
+    cb.checked = !!goal.done;
+    cb.addEventListener('change', () => {
+      const list = getMonthlyGoals();
+      if (!list[origIdx]) return;
+      list[origIdx].done = cb.checked;
+      if (cb.checked) list[origIdx].doneAt = Date.now();
+      else delete list[origIdx].doneAt;
+      setMonthlyGoals(list);
+      renderMonthlyGoals();
+    });
+
+    const text = document.createElement('span');
+    text.className = 'gm-text';
+    text.textContent = goal.text;
+    text.addEventListener('click', () => {
+      if (text.getAttribute('contenteditable') === 'true') return;
+      const original = text.textContent;
+      text.setAttribute('contenteditable', 'true');
+      text.focus();
+      const onBlur = () => {
+        text.removeAttribute('contenteditable');
+        const next = text.textContent.trim();
+        if (next && next !== original) {
+          const list = getMonthlyGoals();
+          if (list[origIdx]) { list[origIdx].text = next; setMonthlyGoals(list); }
+          renderMonthlyGoals();
+        } else { text.textContent = original; }
+      };
+      text.addEventListener('blur', onBlur, { once: true });
+      text.addEventListener('keydown', function onKey(e) {
+        if (e.key === 'Enter') { e.preventDefault(); text.removeEventListener('keydown', onKey); text.blur(); }
+        if (e.key === 'Escape') { text.removeAttribute('contenteditable'); text.textContent = original; text.removeEventListener('keydown', onKey); text.removeEventListener('blur', onBlur); }
+      });
+    });
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'goal-delete';
+    del.setAttribute('aria-label', 'Delete goal');
+    del.textContent = '×';
+    del.addEventListener('click', () => {
+      const list = getMonthlyGoals();
+      list.splice(origIdx, 1);
+      setMonthlyGoals(list);
+      renderMonthlyGoals();
+    });
+
+    li.append(cb, text, del);
+    return li;
+  }
+
+  document.getElementById('mgTabActive').addEventListener('click', () => {
+    mgActiveTab = true;
+    document.getElementById('mgTabActive').classList.add('mg-tab-active');
+    document.getElementById('mgTabDone').classList.remove('mg-tab-active');
+    renderMonthlyGoals();
+  });
+  document.getElementById('mgTabDone').addEventListener('click', () => {
+    mgActiveTab = false;
+    document.getElementById('mgTabDone').classList.add('mg-tab-active');
+    document.getElementById('mgTabActive').classList.remove('mg-tab-active');
+    renderMonthlyGoals();
+  });
+
+  document.getElementById('mgAddBtn').addEventListener('click', () => {
+    const input = document.getElementById('mgInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const list = getMonthlyGoals();
+    list.push({ text, done: false, addedAt: Date.now() });
+    setMonthlyGoals(list);
+    input.value = '';
+    renderMonthlyGoals();
+  });
+  document.getElementById('mgInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('mgAddBtn').click();
+  });
+
   // ---------- Boot ----------
   rollover();
   processStreak();
   loadToday();
   loadTomorrow();
   renderStreak();
+  renderMonthlyGoals();
   updateDayRing();
   setInterval(updateDayRing, 60 * 1000);
   startTicker();
 
   // Re-render when storage changes from another tab (or our bridged parent).
   window.addEventListener('storage', () => {
-    loadToday(); loadTomorrow(); renderStreak();
+    loadToday(); loadTomorrow(); renderStreak(); renderMonthlyGoals();
   });
 })();
 </script>
@@ -1318,7 +1534,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (typeof initCloudSync !== 'function') return;
   initCloudSync({
     appKey: 'goals',
-    syncedPrefixes: ['goals:'],
+    syncedPrefixes: ['goals:', 'monthly_goals:'],
     onApplied: function () {
       window.dispatchEvent(new CustomEvent('goals-changed'));
       window.dispatchEvent(new Event('storage'));
