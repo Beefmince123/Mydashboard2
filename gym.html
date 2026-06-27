@@ -395,6 +395,49 @@ select option { background:#1a1a1c; }
 .complete-ex-sets { color:var(--text-3); font-size:11px; margin-top:3px; }
 .complete-ex-top  { color:var(--text-2); font-family:var(--mono); font-size:12px; }
 
+/* ── Class check-in screen ───────────────── */
+.class-check-wrap {
+  display:flex; flex-direction:column; align-items:center;
+  padding:40px 20px 32px; text-align:center;
+}
+.class-check-emoji { font-size:48px; margin-bottom:16px; }
+.class-check-title {
+  font-size:24px; font-weight:700; color:var(--text-1);
+  letter-spacing:-.02em; margin-bottom:6px;
+}
+.class-check-sub { font-size:13px; color:var(--text-3); margin-bottom:32px; }
+.class-check-btn {
+  width:110px; height:110px; border-radius:55px;
+  border:2px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.05);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all .2s;
+  font-size:44px; margin-bottom:28px;
+  -webkit-tap-highlight-color:transparent;
+}
+.class-check-btn:hover { background:rgba(107,227,164,.12); border-color:rgba(107,227,164,.35); }
+.class-check-btn.checked {
+  background:rgba(107,227,164,.15); border-color:var(--success);
+  box-shadow:0 0 32px rgba(107,227,164,.18);
+}
+.class-check-status {
+  font-size:13px; font-weight:700; letter-spacing:.10em;
+  text-transform:uppercase; color:var(--text-3); margin-bottom:8px;
+  min-height:20px;
+}
+.class-hist-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px; margin-bottom:6px;
+  background:rgba(255,255,255,.025); border:1px solid var(--border);
+  border-radius:11px; font-size:13px;
+}
+.class-hist-date { color:var(--text-1); font-weight:600; }
+.class-hist-badge {
+  font-size:10px; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; padding:3px 8px; border-radius:6px;
+  background:rgba(107,227,164,.12); color:var(--success);
+}
+
 /* ── History ─────────────────────────────── */
 .hist-row {
   display:flex; align-items:center; justify-content:space-between;
@@ -461,11 +504,20 @@ select option { background:#1a1a1c; }
       <label>Emoji (optional)</label>
       <input type="text" id="editRoutineEmoji" placeholder="💪" maxlength="4" style="font-size:24px;text-align:center">
     </div>
+    <div class="toggle-row" style="margin-top:14px">
+      <div>
+        <div class="toggle-label">Class check-in mode</div>
+        <div class="toggle-sub">Just a checkbox — no exercises or sets</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="editClassMode"><span class="toggle-track"></span></label>
+    </div>
   </div>
 
-  <div class="section-label">Exercises</div>
-  <div id="editExList"></div>
-  <button class="btn btn-ghost btn-full" id="addExBtn" type="button" style="margin-top:4px">+ Add Exercise</button>
+  <div id="editExSection">
+    <div class="section-label">Exercises</div>
+    <div id="editExList"></div>
+    <button class="btn btn-ghost btn-full" id="addExBtn" type="button" style="margin-top:4px">+ Add Exercise</button>
+  </div>
 
   <div style="margin-top:16px;display:flex;gap:10px">
     <button class="btn btn-danger btn-full" id="deleteRoutineBtn" type="button" style="display:none">Delete Routine</button>
@@ -561,6 +613,30 @@ select option { background:#1a1a1c; }
 </div>
 
 <!-- ════════════════════════════════════════
+     SCREEN: CLASS CHECK-IN
+════════════════════════════════════════ -->
+<div id="sClass" class="screen">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+    <button class="btn btn-ghost" id="classBackBtn" type="button">← Back</button>
+    <span style="flex:1;font-size:17px;font-weight:700;color:var(--text-1)" id="classRoutineName"></span>
+  </div>
+
+  <div class="card">
+    <div class="class-check-wrap">
+      <div class="class-check-emoji" id="classEmoji">🥊</div>
+      <div class="class-check-title">Did you attend class today?</div>
+      <div class="class-check-sub" id="classDateLabel"></div>
+      <div class="class-check-btn" id="classCheckBtn">☐</div>
+      <div class="class-check-status" id="classStatus"></div>
+      <button class="btn btn-primary" id="classSaveBtn" type="button" style="display:none;min-width:180px">Save Attendance ✓</button>
+    </div>
+  </div>
+
+  <div class="section-label">Past Sessions</div>
+  <div id="classHistory"></div>
+</div>
+
+<!-- ════════════════════════════════════════
      SCREEN: WORKOUT COMPLETE
 ════════════════════════════════════════ -->
 <div id="sComplete" class="screen">
@@ -632,12 +708,7 @@ const DEFAULTS = [
     makeEx('Leg Curl',            3, 'reps', 12,  60,  true),
     makeEx('Calf Raises',         4, 'reps', 20,  45,  true),
   ]},
-  { id: uid(), name: 'Muay Thai', emoji: '🥊', exercises: [
-    makeEx('Pad Work',            5, 'time', 180, 60,  false),
-    makeEx('Heavy Bag',           5, 'time', 180, 60,  false),
-    makeEx('Clinch Work',         3, 'time', 180, 60,  false),
-    makeEx('Shadow Boxing',       3, 'time', 180, 30,  false),
-  ]},
+  { id: uid(), name: 'Muay Thai', emoji: '🥊', classMode: true, exercises: [] },
   { id: uid(), name: 'Push', emoji: '💪', exercises: [
     makeEx('Bench Press',         4, 'reps', 8,   180, true),
     makeEx('Overhead Press',      4, 'reps', 8,   150, true),
@@ -665,7 +736,7 @@ function todaySplitName() { return SPLIT_MAP[new Date().getDay()]; }
 // ═══════════════════════════════════════════════════════
 // SCREEN MANAGER
 // ═══════════════════════════════════════════════════════
-const SCREENS = ['sHome','sEdit','sWorkout','sComplete'];
+const SCREENS = ['sHome','sEdit','sWorkout','sComplete','sClass'];
 function showScreen(id) {
   SCREENS.forEach(s => { const el = $(s); if (el) el.classList.toggle('active', s === id); });
   window.scrollTo(0, 0);
@@ -694,11 +765,14 @@ function renderHome() {
 
       const div = document.createElement('div');
       div.className = 'routine-card' + (isToday ? ' is-today' : '');
+      const metaStr = r.classMode
+        ? 'Class check-in · Last: ' + lastStr
+        : exCount + ' exercises · ' + setCount + ' sets · Last: ' + lastStr;
       div.innerHTML =
         '<div class="routine-emoji">' + (r.emoji || '💪') + '</div>' +
         '<div class="routine-info">' +
           '<div class="routine-name">' + r.name + (isToday ? ' <span style="font-size:10px;color:var(--success);font-weight:700;letter-spacing:.10em;text-transform:uppercase;margin-left:6px">Today</span>' : '') + '</div>' +
-          '<div class="routine-meta">' + exCount + ' exercises · ' + setCount + ' sets · Last: ' + lastStr + '</div>' +
+          '<div class="routine-meta">' + metaStr + '</div>' +
         '</div>' +
         '<div class="routine-actions">' +
           '<button class="btn btn-icon" data-edit="' + r.id + '" title="Edit" type="button">✎</button>' +
@@ -715,11 +789,12 @@ function renderHome() {
     hist.innerHTML = '<div class="empty-state">No workouts logged yet.</div>';
   } else {
     hist.innerHTML = logs.map(l => {
-      const totalSets = l.exercises.reduce((s, e) => s + e.sets.length, 0);
-      const dur = l.duration ? fmtSecs(l.duration) : '—';
+      const isClass = l.classLog;
+      const totalSets = isClass ? '—' : l.exercises.reduce((s, e) => s + e.sets.length, 0) + ' sets';
+      const dur = l.duration ? fmtSecs(l.duration) : (isClass ? 'Attended' : '—');
       return '<div class="hist-row">' +
         '<div><div class="hist-name">' + l.routineName + '</div><div class="hist-meta">' + fmtDate(l.date) + ' · ' + dur + '</div></div>' +
-        '<div class="hist-sets">' + totalSets + ' sets</div>' +
+        '<div class="hist-sets">' + totalSets + '</div>' +
       '</div>';
     }).join('');
   }
@@ -754,6 +829,8 @@ function openEdit(routineId) {
   }
   $('editRoutineName').value = editDraft.name;
   $('editRoutineEmoji').value = editDraft.emoji || '💪';
+  $('editClassMode').checked = !!editDraft.classMode;
+  $('editExSection').style.display = editDraft.classMode ? 'none' : '';
   renderEditExList();
   showScreen('sEdit');
 }
@@ -868,11 +945,17 @@ $('addExBtn').addEventListener('click', () => {
   if (last) { last.classList.add('open'); last.querySelector('.ex-name-input').focus(); }
 });
 
+$('editClassMode').addEventListener('change', () => {
+  editDraft.classMode = $('editClassMode').checked;
+  $('editExSection').style.display = editDraft.classMode ? 'none' : '';
+});
+
 $('editSaveBtn').addEventListener('click', () => {
   // Sync all rows
   $('editExList').querySelectorAll('.ex-row').forEach((div, i) => syncExRow(div, i));
-  editDraft.name  = $('editRoutineName').value.trim() || 'Untitled';
-  editDraft.emoji = $('editRoutineEmoji').value.trim() || '💪';
+  editDraft.name      = $('editRoutineName').value.trim() || 'Untitled';
+  editDraft.emoji     = $('editRoutineEmoji').value.trim() || '💪';
+  editDraft.classMode = $('editClassMode').checked;
   if (editingId) {
     const idx = routines.findIndex(r => r.id === editingId);
     if (idx >= 0) routines[idx] = editDraft;
@@ -912,7 +995,9 @@ const wk = {
 
 function startWorkout(routineId) {
   const r = routines.find(x => x.id === routineId);
-  if (!r || !r.exercises.length) { alert('This routine has no exercises.'); return; }
+  if (!r) return;
+  if (r.classMode) { openClassScreen(r); return; }
+  if (!r.exercises.length) { alert('This routine has no exercises.'); return; }
   wk.routine   = JSON.parse(JSON.stringify(r));
   wk.exIdx     = 0;
   wk.setIdx    = 0;
@@ -1207,6 +1292,85 @@ $('completeSaveBtn').addEventListener('click', () => {
   renderHome();
   showScreen('sHome');
 });
+
+// ═══════════════════════════════════════════════════════
+// CLASS CHECK-IN SCREEN
+// ═══════════════════════════════════════════════════════
+let classRoutine = null;
+let classChecked = false;
+
+function openClassScreen(r) {
+  classRoutine = r;
+  classChecked = false;
+
+  $('classRoutineName').textContent = r.name;
+  $('classEmoji').textContent = r.emoji || '🥊';
+
+  const today = new Date();
+  $('classDateLabel').textContent = today.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long' });
+
+  // Check if already logged today
+  const todayStr = today.toISOString().slice(0, 10);
+  const logs = loadLogs().filter(l => l.routineId === r.id && l.classLog);
+  const alreadyToday = logs.some(l => l.date.slice(0, 10) === todayStr);
+
+  $('classCheckBtn').textContent = '☐';
+  $('classCheckBtn').classList.remove('checked');
+  $('classStatus').textContent = alreadyToday ? '✓ Already logged today' : '';
+  $('classSaveBtn').style.display = 'none';
+  classChecked = false;
+
+  // Recent class history
+  const hist = $('classHistory');
+  const recent = logs.slice().reverse().slice(0, 8);
+  if (!recent.length) {
+    hist.innerHTML = '<div class="empty-state">No sessions logged yet.</div>';
+  } else {
+    hist.innerHTML = recent.map(l =>
+      '<div class="class-hist-row">' +
+        '<div class="class-hist-date">' + fmtDate(l.date) + '</div>' +
+        '<div class="class-hist-badge">Attended</div>' +
+      '</div>'
+    ).join('');
+  }
+
+  showScreen('sClass');
+}
+
+$('classCheckBtn').addEventListener('click', () => {
+  classChecked = !classChecked;
+  $('classCheckBtn').textContent = classChecked ? '✓' : '☐';
+  $('classCheckBtn').classList.toggle('checked', classChecked);
+  $('classStatus').textContent = classChecked ? 'Marked as attended' : '';
+  $('classSaveBtn').style.display = classChecked ? '' : 'none';
+});
+
+$('classSaveBtn').addEventListener('click', () => {
+  if (!classChecked || !classRoutine) return;
+  const logs = loadLogs();
+  logs.push({
+    id: uid(),
+    routineId: classRoutine.id,
+    routineName: classRoutine.name,
+    date: new Date().toISOString(),
+    classLog: true,
+    exercises: [],
+  });
+  saveLogs(logs);
+  renderHome();
+  showScreen('sHome');
+});
+
+$('classBackBtn').addEventListener('click', () => { renderHome(); showScreen('sHome'); });
+
+// Also add classMode toggle to edit screen
+function renderEditClassToggle() {
+  const existing = document.getElementById('editClassModeRow');
+  if (existing) {
+    existing.querySelector('input').checked = !!editDraft.classMode;
+    return;
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 // BOOT
