@@ -1617,13 +1617,15 @@ window.addEventListener('storage', () => {
   routines = loadRoutines() || routines;
   renderHome();
 });
-if (window.initCloudSync) {
-  window.initCloudSync({
-    appKey: 'workouts',
-    syncedKeys: [RKEY, LKEY],
-    onApplied: () => { routines = loadRoutines() || routines; renderHome(); }
-  });
-}
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.initCloudSync) {
+    window.initCloudSync({
+      appKey: 'workouts',
+      syncedKeys: [RKEY, LKEY],
+      onApplied: () => { routines = loadRoutines() || routines; renderHome(); }
+    });
+  }
+});
 
 })();
 </script>
