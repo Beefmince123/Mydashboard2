@@ -85,6 +85,9 @@ body::after {
 }
 
 /* ── Day pill ────────────────────────────── */
+.pills-row {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px;
+}
 .day-pill {
   display:inline-flex; align-items:center; gap:8px;
   padding:8px 14px; border-radius:999px;
@@ -92,7 +95,6 @@ body::after {
   background:rgba(255,255,255,.04);
   font-size:11px; font-weight:700; letter-spacing:.12em;
   text-transform:uppercase; color:var(--text-3);
-  margin-bottom:16px;
 }
 .day-pill-dot {
   width:6px; height:6px; border-radius:50%;
@@ -100,6 +102,36 @@ body::after {
   box-shadow:0 0 6px var(--success);
 }
 .day-pill-name { color:var(--text-1); }
+
+/* ── Streak pill ─────────────────────────── */
+.streak-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:8px 14px; border-radius:999px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.04);
+  font-size:11px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--text-3);
+  transition:all .3s;
+}
+.streak-pill.warm {
+  border-color:rgba(242,192,99,.3);
+  background:rgba(242,192,99,.08);
+  color:var(--warning);
+}
+.streak-pill.hot {
+  border-color:rgba(242,192,99,.45);
+  background:rgba(242,192,99,.12);
+  color:#FFD97D;
+  box-shadow:0 0 16px rgba(242,192,99,.15);
+}
+.streak-fire {
+  font-style:normal;
+  display:none;
+}
+.streak-pill.warm  .streak-fire,
+.streak-pill.hot   .streak-fire { display:inline; }
+.streak-num  { color:inherit; }
+.streak-label { opacity:.75; }
 
 /* ── Routine cards (home) ─────────────────── */
 .routine-card {
@@ -620,10 +652,17 @@ select option { background:#1a1a1c; }
 ════════════════════════════════════════ -->
 <div id="sHome" class="screen active">
   <h1 class="page-title">Fitness</h1>
-  <div id="homeDayPill" class="day-pill">
-    <span class="day-pill-dot"></span>
-    <span>Today —</span>
-    <span class="day-pill-name" id="todaySplitName">—</span>
+  <div class="pills-row">
+    <div class="day-pill">
+      <span class="day-pill-dot"></span>
+      <span>Today —</span>
+      <span class="day-pill-name" id="todaySplitName">—</span>
+    </div>
+    <div class="streak-pill" id="streakPill">
+      <span class="streak-fire" id="streakFire">🔥</span>
+      <span class="streak-num" id="streakNum">0</span>
+      <span class="streak-label">day streak</span>
+    </div>
   </div>
 
   <div id="monthCalendar"></div>
@@ -948,6 +987,7 @@ function renderHome() {
   const split = todaySplitName();
   $('todaySplitName').textContent = split;
 
+  renderStreak();
   renderMonthCalendar();
 
   // Resume banner
@@ -1710,6 +1750,44 @@ function renderEditClassToggle() {
 }
 
 $('resumeWorkoutBtn').addEventListener('click', resumeSavedWorkout);
+
+// ═══════════════════════════════════════════════════════
+// STREAK
+// ═══════════════════════════════════════════════════════
+function localDayStr(date) {
+  const d = date || new Date();
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+function calcWorkoutStreak() {
+  const logs = loadLogs();
+  if (!logs.length) return 0;
+
+  // Build a set of local-date strings for days with any log entry
+  const daySet = new Set(logs.map(l => localDayStr(new Date(l.date))));
+
+  const cursor = new Date();
+  cursor.setHours(12, 0, 0, 0); // avoid DST edge cases
+
+  // If today has no workout yet, start counting from yesterday
+  if (!daySet.has(localDayStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+
+  let streak = 0;
+  while (daySet.has(localDayStr(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+function renderStreak() {
+  const streak = calcWorkoutStreak();
+  $('streakNum').textContent = streak;
+  const pill = $('streakPill');
+  if (streak >= 7)      pill.className = 'streak-pill hot';
+  else if (streak >= 3) pill.className = 'streak-pill warm';
+  else                  pill.className = 'streak-pill';
+}
 
 // ═══════════════════════════════════════════════════════
 // MONTHLY WORKOUT CALENDAR
