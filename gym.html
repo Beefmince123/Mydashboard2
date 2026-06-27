@@ -676,6 +676,15 @@ select option { background:#1a1a1c; }
           <button class="btn btn-primary" id="swToggle" type="button">Start</button>
         </div>
       </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)">or enter manually</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+      <div class="field" style="margin-bottom:16px">
+        <label>Time (MM:SS or seconds)</label>
+        <input type="text" id="swManual" placeholder="e.g. 1:30 or 90" autocomplete="off" inputmode="numeric">
+      </div>
     </div>
 
     <button class="btn btn-primary btn-full" id="logSetBtn" type="button">Log Set</button>
@@ -1189,6 +1198,7 @@ function renderWorkoutSet() {
   if (ex.type === 'time') {
     $('wkRepsMode').style.display = 'none';
     $('wkTimeMode').style.display = '';
+    $('swManual').value = '';
     resetStopwatch();
   } else {
     $('wkRepsMode').style.display = '';
@@ -1236,10 +1246,20 @@ $('logSetBtn').addEventListener('click', () => {
   const ex = wk.routine.exercises[wk.exIdx];
   let entry;
   if (ex.type === 'time') {
-    const secs = Math.round(wk.sw.elapsed);
-    if (secs <= 0) { alert('Start the timer first.'); return; }
+    let secs = 0;
+    const manual = $('swManual').value.trim();
+    if (manual) {
+      const parts = manual.split(':');
+      secs = parts.length === 2
+        ? (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0)
+        : (parseInt(parts[0]) || 0);
+    } else {
+      secs = Math.round(wk.sw.elapsed);
+    }
+    if (secs <= 0) { alert('Enter a time or use the stopwatch first.'); return; }
     entry = { secs };
     stopStopwatch();
+    $('swManual').value = '';
   } else {
     const reps   = parseInt($('wkReps').value) || 0;
     const weight = ex.weight ? (parseFloat($('wkWeight').value) || 0) : null;
