@@ -395,6 +395,51 @@ select option { background:#1a1a1c; }
 .complete-ex-sets { color:var(--text-3); font-size:11px; margin-top:3px; }
 .complete-ex-top  { color:var(--text-2); font-family:var(--mono); font-size:12px; }
 
+/* ── Monthly workout calendar ────────────── */
+.cal-card {
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:16px; margin-bottom:14px;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
+}
+.cal-header {
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;
+}
+.cal-month-label { font-size:15px; font-weight:700; color:var(--text-1); }
+.cal-count {
+  font-size:11px; font-weight:700; color:var(--text-3);
+  background:rgba(255,255,255,.04); border:1px solid var(--border);
+  padding:4px 10px; border-radius:20px;
+}
+.cal-count.has-any { color:var(--success); background:rgba(107,227,164,.08); border-color:rgba(107,227,164,.2); }
+.cal-dow-row {
+  display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:4px;
+}
+.cal-dow {
+  text-align:center; font-size:9px; font-weight:700;
+  letter-spacing:.10em; text-transform:uppercase; color:var(--text-3); padding:3px 0;
+}
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+.cal-day {
+  aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  border-radius:50%; font-size:11.5px; font-weight:600;
+  color:rgba(255,255,255,.2); position:relative; transition:all .15s;
+}
+.cal-day.has-workout {
+  background:rgba(107,227,164,.15); color:#6BE3A4; font-weight:700;
+}
+.cal-day.is-today {
+  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.4);
+  color:var(--text-1);
+}
+.cal-day.is-today.has-workout {
+  background:rgba(107,227,164,.2);
+  box-shadow:inset 0 0 0 1.5px #6BE3A4, 0 0 10px rgba(107,227,164,.2);
+  color:#6BE3A4;
+}
+.cal-day.is-future { color:rgba(255,255,255,.08); }
+.cal-day.empty { pointer-events:none; }
+
 /* ── Exercise progress search + graph ────── */
 .prog-search-wrap { position:relative; margin-bottom:10px; }
 .prog-search-wrap input {
@@ -580,6 +625,8 @@ select option { background:#1a1a1c; }
     <span>Today —</span>
     <span class="day-pill-name" id="todaySplitName">—</span>
   </div>
+
+  <div id="monthCalendar"></div>
 
   <div id="resumeBanner" style="display:none">
     <div class="resume-banner">
@@ -900,6 +947,8 @@ function showScreen(id) {
 function renderHome() {
   const split = todaySplitName();
   $('todaySplitName').textContent = split;
+
+  renderMonthCalendar();
 
   // Resume banner
   const saved = loadActiveWorkout();
@@ -1661,6 +1710,58 @@ function renderEditClassToggle() {
 }
 
 $('resumeWorkoutBtn').addEventListener('click', resumeSavedWorkout);
+
+// ═══════════════════════════════════════════════════════
+// MONTHLY WORKOUT CALENDAR
+// ═══════════════════════════════════════════════════════
+function renderMonthCalendar() {
+  const container = $('monthCalendar');
+  if (!container) return;
+
+  const now   = new Date();
+  const year  = now.getFullYear();
+  const month = now.getMonth();
+  const today = now.getDate();
+
+  // Collect days in this month that have any log entry (workout or class)
+  const workoutDays = new Set();
+  loadLogs().forEach(l => {
+    const d = new Date(l.date);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      workoutDays.add(d.getDate());
+    }
+  });
+
+  const count = workoutDays.size;
+  const MON_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // Monday-start: Mon=0 … Sun=6
+  const startCol = (new Date(year, month, 1).getDay() + 6) % 7;
+
+  const DOW = ['M','T','W','T','F','S','S'];
+
+  let cells = DOW.map(d => `<div class="cal-dow">${d}</div>`).join('');
+  // empty leading cells
+  for (let i = 0; i < startCol; i++) cells += '<div class="cal-day empty"></div>';
+  // day cells
+  for (let d = 1; d <= daysInMonth; d++) {
+    let cls = 'cal-day';
+    if (workoutDays.has(d)) cls += ' has-workout';
+    if (d === today)         cls += ' is-today';
+    else if (d > today)      cls += ' is-future';
+    cells += `<div class="${cls}">${d}</div>`;
+  }
+
+  container.innerHTML =
+    `<div class="cal-card">
+       <div class="cal-header">
+         <div class="cal-month-label">${MON_NAMES[month]} ${year}</div>
+         <div class="cal-count${count ? ' has-any' : ''}">${count} workout${count !== 1 ? 's' : ''}</div>
+       </div>
+       <div class="cal-grid">${cells}</div>
+     </div>`;
+}
 
 // ═══════════════════════════════════════════════════════
 // EXERCISE PROGRESS GRAPHS
