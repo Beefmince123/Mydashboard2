@@ -395,6 +395,41 @@ select option { background:#1a1a1c; }
 .complete-ex-sets { color:var(--text-3); font-size:11px; margin-top:3px; }
 .complete-ex-top  { color:var(--text-2); font-family:var(--mono); font-size:12px; }
 
+/* ── Exercise progress graphs ────────────── */
+.prog-card {
+  background:var(--card-bg);
+  border:1px solid var(--border);
+  border-radius:16px; padding:16px; margin-bottom:10px;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+}
+.prog-head {
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+}
+.prog-name { font-size:15px; font-weight:700; color:var(--text-1); }
+.prog-badge {
+  font-size:9px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; padding:3px 8px; border-radius:6px;
+}
+.prog-badge.weighted { background:rgba(242,192,99,.12); color:#F2C063; }
+.prog-badge.bw       { background:rgba(107,227,164,.12); color:#6BE3A4; }
+.prog-badge.timed    { background:rgba(167,139,250,.12); color:#A78BFA; }
+.prog-chart { margin:0 -2px 12px; overflow:visible; }
+.prog-stats { display:flex; gap:20px; }
+.prog-stat { display:flex; flex-direction:column; }
+.prog-stat-val {
+  font-size:16px; font-weight:700; color:var(--text-1);
+  font-family:var(--mono); line-height:1;
+}
+.prog-stat-lbl {
+  font-size:9.5px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--text-3); margin-top:4px;
+}
+.prog-x-axis {
+  display:flex; justify-content:space-between;
+  padding:0 2px; margin-top:4px;
+  font-size:9px; color:var(--text-3);
+}
+
 /* ── Pause / exit overlay ────────────────── */
 #exitOverlay {
   position:fixed; inset:0; z-index:100;
@@ -546,6 +581,9 @@ select option { background:#1a1a1c; }
 
   <div class="section-label" style="margin-top:24px">Recent Workouts</div>
   <div id="historyList"></div>
+
+  <div class="section-label" style="margin-top:24px">Exercise Progress</div>
+  <div id="progressList"></div>
 </div>
 
 <!-- ════════════════════════════════════════
@@ -905,6 +943,8 @@ function renderHome() {
       '</div>';
     }).join('');
   }
+
+  renderExerciseProgress();
 }
 
 // Delegated clicks on home screen
@@ -1605,6 +1645,166 @@ function renderEditClassToggle() {
 }
 
 $('resumeWorkoutBtn').addEventListener('click', resumeSavedWorkout);
+
+// ═══════════════════════════════════════════════════════
+// EXERCISE PROGRESS GRAPHS
+// ═══════════════════════════════════════════════════════
+function sanitizeId(s) { return s.replace(/[^a-z0-9]/gi, '_').toLowerCase(); }
+
+function getExerciseProgressData() {
+  const logs = loadLogs().filter(l => !l.classLog && l.exercises && l.exercises.length);
+  const map = {};
+
+  logs.forEach(log => {
+    log.exercises.forEach(ex => {
+      if (!ex.sets || !ex.sets.length) return;
+
+      let displayType, value;
+      if (ex.type === 'time') {
+        displayType = 'timed';
+        value = Math.max(...ex.sets.map(s => s.secs || 0));
+      } else {
+        const hasWeight = ex.sets.some(s => (s.weight || 0) > 0);
+        if (hasWeight) {
+          displayType = 'weighted';
+          value = Math.max(...ex.sets.map(s => s.weight || 0));
+        } else {
+          displayType = 'bw';
+          value = Math.max(...ex.sets.map(s => s.reps || 0));
+        }
+      }
+      if (!value || value <= 0) return;
+
+      if (!map[ex.name]) map[ex.name] = { displayType, points: [] };
+      map[ex.name].points.push({ date: log.date, value });
+    });
+  });
+
+  // Sort each exercise's points chronologically
+  Object.values(map).forEach(d => d.points.sort((a, b) => new Date(a.date) - new Date(b.date)));
+
+  // Return sorted by most recent activity
+  return Object.entries(map).sort((a, b) => {
+    const aLast = a[1].points[a[1].points.length - 1].date;
+    const bLast = b[1].points[b[1].points.length - 1].date;
+    return new Date(bLast) - new Date(aLast);
+  });
+}
+
+function drawProgressSvg(name, points, displayType) {
+  const COLOR = { weighted: '#F2C063', bw: '#6BE3A4', timed: '#A78BFA' };
+  const color = COLOR[displayType] || '#FAFAFA';
+  const W = 300, H = 68;
+  const PL = 4, PR = 4, PT = 10, PB = 6;
+  const innerW = W - PL - PR;
+  const innerH = H - PT - PB;
+  const n = points.length;
+  const vals = points.map(p => p.value);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const range = maxV - minV || 1;
+
+  const gid = 'pg_' + sanitizeId(name);
+  const xPos = i => PL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+  const yPos = v => range === 0
+    ? PT + innerH / 2
+    : PT + (1 - (v - minV) / range) * innerH;
+
+  let linePath = '', areaPath = '';
+  if (n > 1) {
+    const pts = points.map((p, i) => [xPos(i), yPos(p.value)]);
+    linePath = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < n; i++) {
+      const cpx = (pts[i - 1][0] + pts[i][0]) / 2;
+      linePath += ` C ${cpx} ${pts[i-1][1]} ${cpx} ${pts[i][1]} ${pts[i][0]} ${pts[i][1]}`;
+    }
+    areaPath = linePath + ` L ${pts[n-1][0]} ${H} L ${pts[0][0]} ${H} Z`;
+  }
+
+  const dots = points.map((p, i) => {
+    const isLast = i === n - 1;
+    return `<circle cx="${xPos(i)}" cy="${yPos(p.value)}" r="${isLast ? 4.5 : 2.5}"
+      fill="${isLast ? color : 'rgba(255,255,255,.18)'}"
+      ${isLast ? `stroke="rgba(0,0,0,.45)" stroke-width="1.5"` : ''}/>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;overflow:visible">
+    <defs>
+      <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${areaPath ? `<path d="${areaPath}" fill="url(#${gid})"/>` : ''}
+    ${linePath ? `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+    ${dots}
+  </svg>`;
+}
+
+function renderExerciseProgress() {
+  const container = $('progressList');
+  if (!container) return;
+  const data = getExerciseProgressData();
+
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state">Log some workouts to see progress charts here.</div>';
+    return;
+  }
+
+  const fmtVal = (v, displayType) => {
+    if (displayType === 'timed') return fmtSecs(v);
+    if (displayType === 'weighted') return v + 'kg';
+    return v + ' reps';
+  };
+  const badgeLabel = { weighted: 'Weighted', bw: 'Bodyweight', timed: 'Timed' };
+
+  container.innerHTML = data.map(([name, d]) => {
+    const { displayType, points } = d;
+    const latest = points[points.length - 1].value;
+    const best   = Math.max(...points.map(p => p.value));
+    const n      = points.length;
+
+    let trendHtml = '';
+    if (n >= 2) {
+      const prev = points[n - 2].value;
+      if (latest > prev)      trendHtml = '<span style="color:#6BE3A4;font-size:13px;margin-left:4px">↑</span>';
+      else if (latest < prev) trendHtml = '<span style="color:#FF6B6B;font-size:13px;margin-left:4px">↓</span>';
+      else                    trendHtml = '<span style="color:var(--text-3);font-size:13px;margin-left:4px">→</span>';
+    }
+
+    // X-axis date labels: first and last only
+    const dateLabel = iso => {
+      const d = new Date(iso);
+      return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getDate();
+    };
+    const xAxis = n > 1
+      ? `<div class="prog-x-axis"><span>${dateLabel(points[0].date)}</span><span>${dateLabel(points[n-1].date)}</span></div>`
+      : '';
+
+    return `<div class="prog-card">
+      <div class="prog-head">
+        <div class="prog-name">${escHtml(name)}</div>
+        <span class="prog-badge ${displayType}">${badgeLabel[displayType]}</span>
+      </div>
+      <div class="prog-chart">${drawProgressSvg(name, points, displayType)}</div>
+      ${xAxis}
+      <div class="prog-stats" style="margin-top:10px">
+        <div class="prog-stat">
+          <div class="prog-stat-val">${fmtVal(latest, displayType)}${trendHtml}</div>
+          <div class="prog-stat-lbl">Latest</div>
+        </div>
+        <div class="prog-stat">
+          <div class="prog-stat-val">${fmtVal(best, displayType)}</div>
+          <div class="prog-stat-lbl">Personal Best</div>
+        </div>
+        <div class="prog-stat">
+          <div class="prog-stat-val">${n}</div>
+          <div class="prog-stat-lbl">Sessions</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
 // ═══════════════════════════════════════════════════════
 // BOOT
