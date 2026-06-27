@@ -395,40 +395,56 @@ select option { background:#1a1a1c; }
 .complete-ex-sets { color:var(--text-3); font-size:11px; margin-top:3px; }
 .complete-ex-top  { color:var(--text-2); font-family:var(--mono); font-size:12px; }
 
-/* ── Exercise progress graphs ────────────── */
+/* ── Exercise progress search + graph ────── */
+.prog-search-wrap { position:relative; margin-bottom:10px; }
+.prog-search-wrap input {
+  width:100%; padding:13px 14px 13px 40px;
+  border:1px solid rgba(255,255,255,.09); border-radius:12px;
+  background:rgba(0,0,0,.28); color:var(--text-1);
+  font-family:inherit; font-size:15px; outline:none;
+  transition:border-color .2s;
+}
+.prog-search-wrap input:focus { border-color:rgba(255,255,255,.32); }
+.prog-search-icon {
+  position:absolute; left:13px; top:50%; transform:translateY(-50%);
+  font-size:14px; color:var(--text-3); pointer-events:none;
+}
+.prog-dropdown {
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:60;
+  background:#141416; border:1px solid rgba(255,255,255,.12);
+  border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.6);
+  max-height:240px; overflow-y:auto;
+}
+.prog-dd-item {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; cursor:pointer; font-size:14px;
+  font-weight:600; color:var(--text-1);
+  border-bottom:1px solid rgba(255,255,255,.05);
+  transition:background .12s; -webkit-tap-highlight-color:transparent;
+}
+.prog-dd-item:last-child { border-bottom:0; }
+.prog-dd-item:hover, .prog-dd-item.active { background:rgba(255,255,255,.06); }
+.prog-dd-empty { padding:16px; text-align:center; color:var(--text-3); font-size:13px; font-style:italic; }
 .prog-card {
-  background:var(--card-bg);
-  border:1px solid var(--border);
-  border-radius:16px; padding:16px; margin-bottom:10px;
+  background:var(--card-bg); border:1px solid var(--border);
+  border-radius:16px; padding:18px;
   backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
 }
-.prog-head {
-  display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
-}
-.prog-name { font-size:15px; font-weight:700; color:var(--text-1); }
+.prog-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.prog-name { font-size:16px; font-weight:700; color:var(--text-1); }
 .prog-badge {
   font-size:9px; font-weight:700; letter-spacing:.12em;
-  text-transform:uppercase; padding:3px 8px; border-radius:6px;
+  text-transform:uppercase; padding:3px 9px; border-radius:6px;
 }
 .prog-badge.weighted { background:rgba(242,192,99,.12); color:#F2C063; }
 .prog-badge.bw       { background:rgba(107,227,164,.12); color:#6BE3A4; }
 .prog-badge.timed    { background:rgba(167,139,250,.12); color:#A78BFA; }
-.prog-chart { margin:0 -2px 12px; overflow:visible; }
-.prog-stats { display:flex; gap:20px; }
+.prog-chart { margin:0 -4px 0; }
+.prog-stats { display:flex; gap:20px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
 .prog-stat { display:flex; flex-direction:column; }
-.prog-stat-val {
-  font-size:16px; font-weight:700; color:var(--text-1);
-  font-family:var(--mono); line-height:1;
-}
-.prog-stat-lbl {
-  font-size:9.5px; font-weight:700; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--text-3); margin-top:4px;
-}
-.prog-x-axis {
-  display:flex; justify-content:space-between;
-  padding:0 2px; margin-top:4px;
-  font-size:9px; color:var(--text-3);
-}
+.prog-stat-val { font-size:17px; font-weight:700; color:var(--text-1); font-family:var(--mono); line-height:1; }
+.prog-stat-lbl { font-size:9.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text-3); margin-top:4px; }
+.prog-placeholder { text-align:center; padding:28px 16px; font-size:13px; color:var(--text-3); }
 
 /* ── Pause / exit overlay ────────────────── */
 #exitOverlay {
@@ -1691,119 +1707,220 @@ function getExerciseProgressData() {
   });
 }
 
+let selectedExerciseName = null;
+
 function drawProgressSvg(name, points, displayType) {
   const COLOR = { weighted: '#F2C063', bw: '#6BE3A4', timed: '#A78BFA' };
   const color = COLOR[displayType] || '#FAFAFA';
-  const W = 300, H = 68;
-  const PL = 4, PR = 4, PT = 10, PB = 6;
+  // Canvas dimensions with room for y-axis labels and x-axis dates
+  const W = 320, H = 130;
+  const PL = 44, PR = 10, PT = 10, PB = 26;
   const innerW = W - PL - PR;
   const innerH = H - PT - PB;
   const n = points.length;
+
   const vals = points.map(p => p.value);
-  const minV = Math.min(...vals);
-  const maxV = Math.max(...vals);
+  const rawMin = Math.min(...vals);
+  const rawMax = Math.max(...vals);
+
+  // Expand range slightly so points don't sit right on top/bottom grid line
+  const pad = rawMax === rawMin ? (rawMax || 1) * 0.5 : (rawMax - rawMin) * 0.12;
+  const minV = Math.max(0, rawMin - pad);
+  const maxV = rawMax + pad;
   const range = maxV - minV || 1;
 
   const gid = 'pg_' + sanitizeId(name);
   const xPos = i => PL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
-  const yPos = v => range === 0
-    ? PT + innerH / 2
-    : PT + (1 - (v - minV) / range) * innerH;
+  const yPos = v => PT + (1 - (v - minV) / range) * innerH;
 
+  // ── Y-axis grid (4 lines) ──────────────────
+  const GRID_ROWS = 4;
+  const fmtLabel = v => {
+    if (displayType === 'timed') return fmtSecs(Math.round(v));
+    if (displayType === 'weighted') {
+      const r = Math.round(v * 4) / 4; // nearest 0.25
+      return r % 1 === 0 ? r + 'kg' : r + 'kg';
+    }
+    return Math.round(v) + 'r';
+  };
+  const gridRows = Array.from({ length: GRID_ROWS + 1 }, (_, i) => {
+    const v = minV + (range * i / GRID_ROWS);
+    const y = yPos(v);
+    return { v, y };
+  });
+  const hGridLines = gridRows.map(({ y }) =>
+    `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W - PR}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/>`
+  ).join('');
+  const yLabels = gridRows.map(({ v, y }) =>
+    `<text x="${PL - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" fill="rgba(255,255,255,.28)" font-size="9" font-family="ui-monospace,monospace">${fmtLabel(v)}</text>`
+  ).join('');
+
+  // ── X-axis grid + labels ───────────────────
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateShort = iso => { const d = new Date(iso); return MON[d.getMonth()] + ' ' + d.getDate(); };
+
+  // Pick which indices to label (max ~4 labels to avoid crowding)
+  let labelIdxs = [0];
+  if (n > 1) {
+    if (n <= 4) { labelIdxs = points.map((_, i) => i); }
+    else if (n <= 8) { labelIdxs = [0, Math.round((n-1)/3), Math.round(2*(n-1)/3), n-1]; }
+    else { labelIdxs = [0, Math.round((n-1)/3), Math.round(2*(n-1)/3), n-1]; }
+    labelIdxs = [...new Set(labelIdxs)]; // dedupe
+  }
+  const vGridLines = labelIdxs.map(i => {
+    const x = xPos(i).toFixed(1);
+    return `<line x1="${x}" y1="${PT}" x2="${x}" y2="${PT + innerH}" stroke="rgba(255,255,255,.05)" stroke-width="1"/>`;
+  }).join('');
+  const xLabels = labelIdxs.map(i => {
+    const x = xPos(i);
+    const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
+    return `<text x="${x.toFixed(1)}" y="${H - 5}" text-anchor="${anchor}" fill="rgba(255,255,255,.28)" font-size="9" font-family="-apple-system,sans-serif">${dateShort(points[i].date)}</text>`;
+  }).join('');
+
+  // ── Line + area ────────────────────────────
   let linePath = '', areaPath = '';
   if (n > 1) {
     const pts = points.map((p, i) => [xPos(i), yPos(p.value)]);
-    linePath = `M ${pts[0][0]} ${pts[0][1]}`;
+    linePath = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
     for (let i = 1; i < n; i++) {
-      const cpx = (pts[i - 1][0] + pts[i][0]) / 2;
-      linePath += ` C ${cpx} ${pts[i-1][1]} ${cpx} ${pts[i][1]} ${pts[i][0]} ${pts[i][1]}`;
+      const cpx = ((pts[i-1][0] + pts[i][0]) / 2).toFixed(1);
+      linePath += ` C ${cpx} ${pts[i-1][1].toFixed(1)} ${cpx} ${pts[i][1].toFixed(1)} ${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`;
     }
-    areaPath = linePath + ` L ${pts[n-1][0]} ${H} L ${pts[0][0]} ${H} Z`;
+    areaPath = `${linePath} L ${pts[n-1][0].toFixed(1)} ${(PT + innerH).toFixed(1)} L ${pts[0][0].toFixed(1)} ${(PT + innerH).toFixed(1)} Z`;
   }
 
+  // ── Dots ──────────────────────────────────
   const dots = points.map((p, i) => {
     const isLast = i === n - 1;
-    return `<circle cx="${xPos(i)}" cy="${yPos(p.value)}" r="${isLast ? 4.5 : 2.5}"
-      fill="${isLast ? color : 'rgba(255,255,255,.18)'}"
-      ${isLast ? `stroke="rgba(0,0,0,.45)" stroke-width="1.5"` : ''}/>`;
+    const cx = xPos(i).toFixed(1), cy = yPos(p.value).toFixed(1);
+    return isLast
+      ? `<circle cx="${cx}" cy="${cy}" r="5" fill="${color}" stroke="rgba(0,0,0,.5)" stroke-width="1.5"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="3" fill="rgba(255,255,255,.18)"/>`;
   }).join('');
 
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;overflow:visible">
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block">
     <defs>
       <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${color}" stop-opacity="0.22"/>
-        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
       </linearGradient>
     </defs>
+    ${hGridLines}
+    ${vGridLines}
+    ${yLabels}
     ${areaPath ? `<path d="${areaPath}" fill="url(#${gid})"/>` : ''}
-    ${linePath ? `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+    ${linePath ? `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
     ${dots}
+    ${xLabels}
   </svg>`;
 }
 
 function renderExerciseProgress() {
   const container = $('progressList');
   if (!container) return;
-  const data = getExerciseProgressData();
 
-  if (!data.length) {
-    container.innerHTML = '<div class="empty-state">Log some workouts to see progress charts here.</div>';
-    return;
+  const allData = getExerciseProgressData();
+
+  // ── Build shell (search + display area) ──
+  container.innerHTML =
+    `<div class="prog-search-wrap">
+       <span class="prog-search-icon">⌕</span>
+       <input type="text" id="progSearch" placeholder="Search exercise…" autocomplete="off">
+       <div id="progDropdown" class="prog-dropdown" style="display:none"></div>
+     </div>
+     <div id="progressDisplay"></div>`;
+
+  const input    = $('progSearch');
+  const dropdown = $('progDropdown');
+  const display  = $('progressDisplay');
+
+  const BADGE_LABEL = { weighted: 'Weighted', bw: 'Bodyweight', timed: 'Timed' };
+  const FMT_VAL = (v, dt) => dt === 'timed' ? fmtSecs(v) : dt === 'weighted' ? v + 'kg' : v + ' reps';
+
+  // ── Dropdown population ───────────────────
+  function populateDropdown(filter) {
+    const filtered = filter
+      ? allData.filter(([name]) => name.toLowerCase().includes(filter.toLowerCase()))
+      : allData;
+    if (!filtered.length) {
+      dropdown.innerHTML = '<div class="prog-dd-empty">No exercises found</div>';
+    } else {
+      dropdown.innerHTML = filtered.map(([name, d]) =>
+        `<div class="prog-dd-item" data-name="${escHtml(name)}">
+           <span>${escHtml(name)}</span>
+           <span class="prog-badge ${d.displayType}">${BADGE_LABEL[d.displayType]}</span>
+         </div>`
+      ).join('');
+    }
+    dropdown.style.display = '';
   }
 
-  const fmtVal = (v, displayType) => {
-    if (displayType === 'timed') return fmtSecs(v);
-    if (displayType === 'weighted') return v + 'kg';
-    return v + ' reps';
-  };
-  const badgeLabel = { weighted: 'Weighted', bw: 'Bodyweight', timed: 'Timed' };
+  input.addEventListener('focus', () => populateDropdown(input.value));
+  input.addEventListener('input', () => populateDropdown(input.value));
+  input.addEventListener('blur',  () => setTimeout(() => { dropdown.style.display = 'none'; }, 160));
 
-  container.innerHTML = data.map(([name, d]) => {
+  dropdown.addEventListener('mousedown', e => e.preventDefault()); // keep focus on input
+  dropdown.addEventListener('click', e => {
+    const item = e.target.closest('[data-name]');
+    if (!item) return;
+    const name = item.dataset.name;
+    input.value = name;
+    dropdown.style.display = 'none';
+    showGraph(name);
+  });
+
+  // ── Single graph render ───────────────────
+  function showGraph(name) {
+    selectedExerciseName = name;
+    const entry = allData.find(([n]) => n === name);
+    if (!entry) { display.innerHTML = ''; return; }
+    const [, d] = entry;
     const { displayType, points } = d;
-    const latest = points[points.length - 1].value;
+    const n = points.length;
+    const latest = points[n - 1].value;
     const best   = Math.max(...points.map(p => p.value));
-    const n      = points.length;
 
     let trendHtml = '';
     if (n >= 2) {
       const prev = points[n - 2].value;
-      if (latest > prev)      trendHtml = '<span style="color:#6BE3A4;font-size:13px;margin-left:4px">↑</span>';
-      else if (latest < prev) trendHtml = '<span style="color:#FF6B6B;font-size:13px;margin-left:4px">↓</span>';
-      else                    trendHtml = '<span style="color:var(--text-3);font-size:13px;margin-left:4px">→</span>';
+      if (latest > prev)      trendHtml = '<span style="color:#6BE3A4;margin-left:5px">↑</span>';
+      else if (latest < prev) trendHtml = '<span style="color:#FF6B6B;margin-left:5px">↓</span>';
+      else                    trendHtml = '<span style="color:var(--text-3);margin-left:5px">→</span>';
     }
 
-    // X-axis date labels: first and last only
-    const dateLabel = iso => {
-      const d = new Date(iso);
-      return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getDate();
-    };
-    const xAxis = n > 1
-      ? `<div class="prog-x-axis"><span>${dateLabel(points[0].date)}</span><span>${dateLabel(points[n-1].date)}</span></div>`
-      : '';
+    display.innerHTML =
+      `<div class="prog-card">
+         <div class="prog-head">
+           <div class="prog-name">${escHtml(name)}</div>
+           <span class="prog-badge ${displayType}">${BADGE_LABEL[displayType]}</span>
+         </div>
+         <div class="prog-chart">${drawProgressSvg(name, points, displayType)}</div>
+         <div class="prog-stats">
+           <div class="prog-stat">
+             <div class="prog-stat-val">${FMT_VAL(latest, displayType)}${trendHtml}</div>
+             <div class="prog-stat-lbl">Latest</div>
+           </div>
+           <div class="prog-stat">
+             <div class="prog-stat-val">${FMT_VAL(best, displayType)}</div>
+             <div class="prog-stat-lbl">Personal Best</div>
+           </div>
+           <div class="prog-stat">
+             <div class="prog-stat-val">${n}</div>
+             <div class="prog-stat-lbl">Sessions</div>
+           </div>
+         </div>
+       </div>`;
+  }
 
-    return `<div class="prog-card">
-      <div class="prog-head">
-        <div class="prog-name">${escHtml(name)}</div>
-        <span class="prog-badge ${displayType}">${badgeLabel[displayType]}</span>
-      </div>
-      <div class="prog-chart">${drawProgressSvg(name, points, displayType)}</div>
-      ${xAxis}
-      <div class="prog-stats" style="margin-top:10px">
-        <div class="prog-stat">
-          <div class="prog-stat-val">${fmtVal(latest, displayType)}${trendHtml}</div>
-          <div class="prog-stat-lbl">Latest</div>
-        </div>
-        <div class="prog-stat">
-          <div class="prog-stat-val">${fmtVal(best, displayType)}</div>
-          <div class="prog-stat-lbl">Personal Best</div>
-        </div>
-        <div class="prog-stat">
-          <div class="prog-stat-val">${n}</div>
-          <div class="prog-stat-lbl">Sessions</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  // Restore previously selected exercise across re-renders
+  if (!allData.length) {
+    display.innerHTML = '<div class="empty-state">Log some workouts to see progress charts here.</div>';
+  } else if (selectedExerciseName && allData.find(([n]) => n === selectedExerciseName)) {
+    input.value = selectedExerciseName;
+    showGraph(selectedExerciseName);
+  } else {
+    display.innerHTML = '<div class="prog-placeholder">🔍 Search for an exercise above to see its progress</div>';
+  }
 }
 
 // ═══════════════════════════════════════════════════════
