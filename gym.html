@@ -1492,7 +1492,7 @@ img, video, canvas, svg { max-width: 100%; }
             <button class="po-w-btn" id="weightUpBtn" type="button">+</button>
           </div>
         </div>
-        <div class="po-field">
+        <div class="po-field" id="repsField">
           <label>Reps</label>
           <div class="po-reps-row" id="repsRow" data-value="8">
             <button type="button" class="po-reps-pill" data-v="4">4</button>
@@ -1504,6 +1504,14 @@ img, video, canvas, svg { max-width: 100%; }
             <button type="button" class="po-reps-pill" data-v="10">10</button>
             <button type="button" class="po-reps-pill" data-v="11">11</button>
             <button type="button" class="po-reps-pill" data-v="12">12</button>
+          </div>
+        </div>
+        <div class="po-field" id="timedField" style="display:none">
+          <label>Seconds</label>
+          <div class="po-weight-row">
+            <button class="po-w-btn" id="secsDownBtn" type="button">−</button>
+            <input type="number" id="secsInput" step="5" inputmode="decimal" placeholder="30">
+            <button class="po-w-btn" id="secsUpBtn" type="button">+</button>
           </div>
         </div>
       </div>
@@ -1611,6 +1619,10 @@ img, video, canvas, svg { max-width: 100%; }
       <input type="checkbox" id="exBw">
       Bodyweight (track reps only, no weight)
     </label>
+    <label class="po-bw-toggle">
+      <input type="checkbox" id="exTimed">
+      Timed (track duration in seconds, not reps)
+    </label>
     <div class="po-field" id="exStartWeightField">
       <label style="font-size:11px;color:var(--text-3);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Starting weight</label>
       <input type="number" id="exStartWeight" step="0.5" placeholder="20" value="20">
@@ -1623,6 +1635,16 @@ img, video, canvas, svg { max-width: 100%; }
       <div class="po-field">
         <label style="font-size:11px;color:var(--text-3);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Reps max</label>
         <input type="number" id="exRepMax" value="8">
+      </div>
+    </div>
+    <div class="po-log-grid" id="exTimeFields" style="display:none">
+      <div class="po-field">
+        <label style="font-size:11px;color:var(--text-3);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Min (seconds)</label>
+        <input type="number" id="exTimeMin" value="10">
+      </div>
+      <div class="po-field">
+        <label style="font-size:11px;color:var(--text-3);font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Max (seconds)</label>
+        <input type="number" id="exTimeMax" value="30">
       </div>
     </div>
     <div class="po-field" id="exStepField">
@@ -1790,10 +1812,17 @@ img, video, canvas, svg { max-width: 100%; }
     const last = logs[logs.length - 1];
     const { weight, reps } = last;
     const { repMin, repMax, step, bw } = ex;
-    const upgradeAt = Math.min(CONFIG.upgradeAtReps || 8, repMax);
+    const upgradeAt = Math.min(CONFIG.upgradeAtReps || 8, repMax || 8);
     let stuck = 0;
     for (let i = logs.length - 1; i >= 0; i--) {
       if (logs[i].weight === weight) stuck++; else break;
+    }
+    if (ex.timed) {
+      const secs = last.secs || 0;
+      const tMin = ex.timeMin || 10, tMax = ex.timeMax || 30;
+      if (secs >= tMax) return { type: 'up', secs: secs + 5, tag: 'Push longer', reason: fmtSecs(secs) + ' — great. Aim for ' + fmtSecs(secs + 5) + ' next time.', timed: true };
+      if (secs >= tMin) return { type: 'hold', secs: Math.min(secs + 5, tMax), tag: 'Add time', reason: fmtSecs(secs) + ' in range. Push for ' + fmtSecs(Math.min(secs + 5, tMax)) + ' next session.', timed: true };
+      return { type: 'hold', secs: tMin, tag: 'Repeat', reason: fmtSecs(secs) + ' fell short. Repeat until you hit ' + fmtSecs(tMin) + '+.', timed: true };
     }
     if (bw) {
       if (reps >= upgradeAt) return { type: 'up', weight: 0, reps: reps + 1, tag: 'Push for more', reason: reps + ' reps — strong. Push for ' + (reps + 1) + ' next time.', bw: true };
@@ -1848,7 +1877,7 @@ img, video, canvas, svg { max-width: 100%; }
     noMsg.style.display = 'none';
     if (!f.find(e => e.id === state.currentEx)) state.currentEx = f[0].id;
     sel.innerHTML = f.map(e => {
-      const wLbl = e.bw ? ' · BW' : (e.startWeight ? ' · ' + e.startWeight + unit() : '');
+      const wLbl = e.timed ? ' · Timed' : e.bw ? ' · BW' : (e.startWeight ? ' · ' + e.startWeight + unit() : '');
       const sh = e.gym === 'both' ? ' ★' : '';
       return '<option value="' + e.id + '"' + (e.id === state.currentEx ? ' selected' : '') + '>' + escape(e.name) + wLbl + sh + '</option>';
     }).join('');
@@ -1857,17 +1886,34 @@ img, video, canvas, svg { max-width: 100%; }
     const ex = getCurrentEx();
     const banner = $('bwBanner');
     const wField = $('weightField');
+    const repsField = $('repsField');
+    const timedField = $('timedField');
     const oneRmLbl = $('oneRmLabel');
     const grid = $('logGrid');
     $('weightLabel').textContent = 'Weight (' + unit() + ')';
-    if (ex && ex.bw) {
+    if (ex && ex.timed) {
+      banner.textContent = 'Timed — log duration in seconds';
       banner.classList.add('show');
       wField.style.display = 'none';
+      repsField.style.display = 'none';
+      timedField.style.display = '';
+      grid.classList.add('po-bw-mode');
+      oneRmLbl.textContent = 'Best time';
+      const logs = getLogs();
+      $('secsInput').value = logs.length ? (logs[logs.length - 1].secs || ex.timeMin || 10) : (ex.timeMin || 10);
+    } else if (ex && ex.bw) {
+      banner.textContent = 'Bodyweight — log reps only';
+      banner.classList.add('show');
+      wField.style.display = 'none';
+      repsField.style.display = '';
+      timedField.style.display = 'none';
       grid.classList.add('po-bw-mode');
       oneRmLbl.textContent = 'Best reps';
     } else {
       banner.classList.remove('show');
       wField.style.display = '';
+      repsField.style.display = '';
+      timedField.style.display = 'none';
       grid.classList.remove('po-bw-mode');
       oneRmLbl.textContent = 'Est. 1RM';
     }
@@ -1880,7 +1926,7 @@ img, video, canvas, svg { max-width: 100%; }
     const logs = ex ? getLogs() : [];
     if (!ex || !logs.length) { wrap.classList.remove('show'); return; }
     const last = logs[logs.length - 1];
-    const setStr = ex.bw ? (last.reps + ' reps') : (last.weight + unit() + ' × ' + last.reps);
+    const setStr = ex.timed ? fmtSecs(last.secs) : ex.bw ? (last.reps + ' reps') : (last.weight + unit() + ' × ' + last.reps);
     const d = new Date(last.date);
     const da = Math.floor((Date.now() - d.getTime()) / 86400000);
     const ago = da === 0 ? 'today' : da === 1 ? 'yesterday' : da + ' days ago';
@@ -1896,18 +1942,25 @@ img, video, canvas, svg { max-width: 100%; }
     const rx = getRx(ex, logs);
     if (!rx) {
       const sw = ex.startWeight, sr = ex.repMin;
-      const head = ex.bw
-        ? '<span class="po-accent">' + sr + '</span> reps'
-        : '<span class="po-accent">' + (sw || 0) + unit() + '</span> × ' + sr + ' reps';
-      const reason = ex.bw
-        ? 'Aim for ' + ex.repMin + '-' + ex.repMax + ' clean reps. Once you hit ' + ex.repMax + '+, push for more.'
-        : 'Hit ' + ex.repMin + '-' + ex.repMax + ' reps. Once logged, the coach will start prescribing.';
+      let head, reason;
+      if (ex.timed) {
+        head = '<span class="po-accent">' + fmtSecs(ex.timeMin || 10) + '</span>';
+        reason = 'Hold for ' + fmtSecs(ex.timeMin || 10) + '. Once you hit ' + fmtSecs(ex.timeMax || 30) + '+, push for more.';
+      } else if (ex.bw) {
+        head = '<span class="po-accent">' + sr + '</span> reps';
+        reason = 'Aim for ' + ex.repMin + '-' + ex.repMax + ' clean reps. Once you hit ' + ex.repMax + '+, push for more.';
+      } else {
+        head = '<span class="po-accent">' + (sw || 0) + unit() + '</span> × ' + sr + ' reps';
+        reason = 'Hit ' + ex.repMin + '-' + ex.repMax + ' reps. Once logged, the coach will start prescribing.';
+      }
       wrap.innerHTML = '<div class="po-rx-card"><div class="po-rx-label">' + escape(ex.name) + ' · starting point</div><div class="po-rx-headline">' + head + '</div><span class="po-rx-tag hold">Start here</span><p class="po-rx-reason">' + reason + '</p></div>';
       return;
     }
-    const head = rx.bw
-      ? '<span class="po-accent">' + rx.reps + '</span> reps'
-      : '<span class="po-accent">' + rx.weight + unit() + '</span> × ' + rx.reps + ' reps';
+    const head = rx.timed
+      ? '<span class="po-accent">' + fmtSecs(rx.secs) + '</span>'
+      : rx.bw
+        ? '<span class="po-accent">' + rx.reps + '</span> reps'
+        : '<span class="po-accent">' + rx.weight + unit() + '</span> × ' + rx.reps + ' reps';
     wrap.innerHTML = '<div class="po-rx-card po-rx-' + rx.type + '"><div class="po-rx-label">' + escape(ex.name) + '</div><div class="po-rx-headline">' + head + '</div><span class="po-rx-tag ' + rx.type + '">' + rx.tag + '</span><p class="po-rx-reason">' + rx.reason + '</p></div>';
   }
   function renderStats() {
@@ -1919,7 +1972,10 @@ img, video, canvas, svg { max-width: 100%; }
       $('sessionCount').textContent = '—';
       return;
     }
-    if (ex.bw) {
+    if (ex.timed) {
+      const bt = Math.max.apply(null, logs.map(l => l.secs || 0));
+      $('oneRm').innerHTML = fmtSecs(bt) + '<span class="po-unit">best</span>';
+    } else if (ex.bw) {
       const br = Math.max.apply(null, logs.map(l => l.reps));
       $('oneRm').innerHTML = br + '<span class="po-unit">reps</span>';
     } else {
@@ -1928,11 +1984,11 @@ img, video, canvas, svg { max-width: 100%; }
     }
     let best = logs[0];
     logs.forEach(l => {
-      const cur = ex.bw ? l.reps : estimate1RM(l.weight, l.reps);
-      const bestVal = ex.bw ? best.reps : estimate1RM(best.weight, best.reps);
+      const cur = ex.timed ? (l.secs || 0) : ex.bw ? l.reps : estimate1RM(l.weight, l.reps);
+      const bestVal = ex.timed ? (best.secs || 0) : ex.bw ? best.reps : estimate1RM(best.weight, best.reps);
       if (cur > bestVal) best = l;
     });
-    $('bestSet').textContent = ex.bw ? (best.reps + 'r') : (best.weight + '×' + best.reps);
+    $('bestSet').textContent = ex.timed ? fmtSecs(best.secs || 0) : ex.bw ? (best.reps + 'r') : (best.weight + '×' + best.reps);
     $('sessionCount').textContent = logs.length;
   }
   function renderSparkline() {
@@ -1945,7 +2001,7 @@ img, video, canvas, svg { max-width: 100%; }
       return;
     }
     svg.style.display = 'block'; empty.style.display = 'none';
-    const vals = logs.map(l => ex.bw ? l.reps : estimate1RM(l.weight, l.reps));
+    const vals = logs.map(l => ex.timed ? (l.secs || 0) : ex.bw ? l.reps : estimate1RM(l.weight, l.reps));
     const min = Math.min.apply(null, vals);
     const max = Math.max.apply(null, vals);
     const range = max - min || 1;
@@ -1974,7 +2030,7 @@ img, video, canvas, svg { max-width: 100%; }
     wrap.innerHTML = logs.slice(0, 12).map((l, i) => {
       const d = new Date(l.date);
       const dStr = (d.getMonth() + 1) + '/' + d.getDate();
-      const setStr = ex.bw ? (l.reps + ' reps') : (l.weight + unit() + ' × ' + l.reps);
+      const setStr = ex.timed ? fmtSecs(l.secs) : ex.bw ? (l.reps + ' reps') : (l.weight + unit() + ' × ' + l.reps);
       const realIdx = logs.length - 1 - i; // since we reversed
       return '<div class="po-hist-row">'
         + '<div class="po-hist-date">' + dStr + '</div>'
@@ -2039,6 +2095,7 @@ img, video, canvas, svg { max-width: 100%; }
     const row = document.getElementById('repsRow');
     if (!row) return;
     const ex = getCurrentEx();
+    if (ex && ex.timed) return;
     let repMin, repMax;
     if (ex) {
       repMin = Math.max(1, parseInt(ex.repMin, 10) || 1);
@@ -2073,7 +2130,7 @@ img, video, canvas, svg { max-width: 100%; }
     renderPastWorkouts();
     // Pre-fill weight input with last logged weight (or starting weight)
     const ex = getCurrentEx();
-    if (ex && !ex.bw) {
+    if (ex && !ex.bw && !ex.timed) {
       const logs = getLogs();
       const w = logs.length ? logs[logs.length - 1].weight : (ex.startWeight || 0);
       $('weightInput').value = w;
@@ -2161,10 +2218,12 @@ img, video, canvas, svg { max-width: 100%; }
     } else {
       empty.classList.add('hidden');
       list.innerHTML = sum.perEx.map(e => {
-        const top = e.ex.bw
-          ? 'top ' + Math.max.apply(null, e.sets.map(s => s.reps)) + ' reps'
-          : 'top ' + Math.max.apply(null, e.sets.map(s => s.weight)) + u;
-        const meta = e.ex.bw
+        const top = e.ex.timed
+          ? 'best ' + fmtSecs(Math.max.apply(null, e.sets.map(s => s.secs || 0)))
+          : e.ex.bw
+            ? 'top ' + Math.max.apply(null, e.sets.map(s => s.reps)) + ' reps'
+            : 'top ' + Math.max.apply(null, e.sets.map(s => s.weight)) + u;
+        const meta = (e.ex.timed || e.ex.bw)
           ? (e.sets.length + ' set' + (e.sets.length === 1 ? '' : 's') + ' · ' + top)
           : (e.sets.length + ' set' + (e.sets.length === 1 ? '' : 's') + ' · ' + top + ' · ' + Math.round(e.vol) + u + ' total');
         return '<li class="po-tw-row">'
@@ -2278,15 +2337,29 @@ img, video, canvas, svg { max-width: 100%; }
     p.classList.add('active');
     $('repsRow').dataset.value = p.dataset.v;
   });
+  $('secsDownBtn').addEventListener('click', () => {
+    const s = parseInt($('secsInput').value) || 0;
+    $('secsInput').value = Math.max(5, s - 5);
+  });
+  $('secsUpBtn').addEventListener('click', () => {
+    const s = parseInt($('secsInput').value) || 0;
+    $('secsInput').value = s + 5;
+  });
   $('logBtn').addEventListener('click', () => {
     const ex = getCurrentEx();
     if (!ex) return;
-    const reps = parseInt($('repsRow').dataset.value, 10) || 0;
-    if (reps <= 0) { alert('Pick a rep count.'); return; }
-    const w = ex.bw ? 0 : (parseFloat($('weightInput').value) || 0);
-    if (!ex.bw && w <= 0) { alert('Enter a weight.'); return; }
     const arr = state.logs[ex.id] || [];
-    arr.push({ weight: w, reps: reps, date: new Date().toISOString() });
+    if (ex.timed) {
+      const secs = parseInt($('secsInput').value, 10) || 0;
+      if (secs <= 0) { alert('Enter a duration.'); return; }
+      arr.push({ secs: secs, date: new Date().toISOString() });
+    } else {
+      const reps = parseInt($('repsRow').dataset.value, 10) || 0;
+      if (reps <= 0) { alert('Pick a rep count.'); return; }
+      const w = ex.bw ? 0 : (parseFloat($('weightInput').value) || 0);
+      if (!ex.bw && w <= 0) { alert('Enter a weight.'); return; }
+      arr.push({ weight: w, reps: reps, date: new Date().toISOString() });
+    }
     state.logs[ex.id] = arr;
     saveState(); renderAll();
     // Strength changed → composition estimate may shift
@@ -2334,18 +2407,24 @@ img, video, canvas, svg { max-width: 100%; }
       modalGym = ex.gym;
       modalDay = ex.day;
       $('exBw').checked = !!ex.bw;
+      $('exTimed').checked = !!ex.timed;
       $('exStartWeight').value = ex.startWeight || 0;
-      $('exRepMin').value = ex.repMin;
-      $('exRepMax').value = ex.repMax;
+      $('exRepMin').value = ex.repMin || 6;
+      $('exRepMax').value = ex.repMax || 8;
+      $('exTimeMin').value = ex.timeMin || 10;
+      $('exTimeMax').value = ex.timeMax || 30;
       $('exStep').value = ex.step;
     } else {
       $('exName').value = '';
       modalGym = state.filterGym;
       modalDay = state.filterDay;
       $('exBw').checked = false;
+      $('exTimed').checked = false;
       $('exStartWeight').value = 20;
       $('exRepMin').value = 6;
       $('exRepMax').value = 8;
+      $('exTimeMin').value = 10;
+      $('exTimeMax').value = 30;
       $('exStep').value = 2.5;
     }
     renderModalSegs();
@@ -2353,12 +2432,24 @@ img, video, canvas, svg { max-width: 100%; }
     $('exModalBg').classList.add('show');
     setTimeout(() => $('exName').focus(), 60);
   }
+  function fmtSecs(s) {
+    s = Math.round(s || 0);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60), r = s % 60;
+    return r ? m + 'm ' + r + 's' : m + 'm';
+  }
+
   function toggleBwFields() {
     const isBw = $('exBw').checked;
-    $('exStartWeightField').style.display = isBw ? 'none' : '';
-    $('exStepField').style.display = isBw ? 'none' : '';
+    const isTimed = $('exTimed').checked;
+    $('exStartWeightField').style.display = (isBw || isTimed) ? 'none' : '';
+    $('exStepField').style.display = (isBw || isTimed) ? 'none' : '';
+    $('exNumFields').style.display = isTimed ? 'none' : '';
+    $('exTimeFields').style.display = isTimed ? '' : 'none';
+    if (isTimed) $('exBw').checked = false;
   }
   $('exBw').addEventListener('change', toggleBwFields);
+  $('exTimed').addEventListener('change', toggleBwFields);
   $('addExBtn').addEventListener('click', () => openExModal('add'));
   $('editExBtn').addEventListener('click', () => {
     const ex = getCurrentEx();
@@ -2371,14 +2462,19 @@ img, video, canvas, svg { max-width: 100%; }
     if (!modalGym) { alert('Pick a gym.'); return; }
     if (!modalDay) { alert('Pick a day.'); return; }
     const isBw = $('exBw').checked;
+    const isTimed = $('exTimed').checked;
     const repMin = parseInt($('exRepMin').value, 10) || 6;
     const repMax = parseInt($('exRepMax').value, 10) || 8;
     const data = {
       name, gym: modalGym, day: modalDay,
-      bw: isBw,
-      startWeight: isBw ? 0 : (parseFloat($('exStartWeight').value) || 0),
-      repMin, repMax,
-      step: isBw ? 1 : (parseFloat($('exStep').value) || 2.5)
+      bw: isBw && !isTimed,
+      timed: isTimed,
+      startWeight: (isBw || isTimed) ? 0 : (parseFloat($('exStartWeight').value) || 0),
+      repMin: isTimed ? 0 : repMin,
+      repMax: isTimed ? 0 : repMax,
+      timeMin: isTimed ? (parseInt($('exTimeMin').value, 10) || 10) : 0,
+      timeMax: isTimed ? (parseInt($('exTimeMax').value, 10) || 30) : 0,
+      step: (isBw || isTimed) ? 1 : (parseFloat($('exStep').value) || 2.5)
     };
     if (editingExId) {
       const ex = state.exercises.find(e => e.id === editingExId);
