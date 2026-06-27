@@ -702,8 +702,9 @@ body::after {
   // Paste your Anthropic key here to enable ✨ Polish. Empty = falls back to plain add.
   const ANTHROPIC_API_KEY = '';
 
-  const WAKE_HOUR  = 8;
-  const SLEEP_HOUR = 24;
+  const _dow = new Date().getDay(); // 0=Sun, 6=Sat
+  const WAKE_HOUR  = (_dow === 0 || _dow === 6) ? 7.5 : 6.5; // 7:30 weekends, 6:30 weekdays
+  const SLEEP_HOUR = 22; // 10:00 PM every day
 
   // ---------- storage helpers ----------
   function storeGet(key) {
