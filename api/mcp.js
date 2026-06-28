@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 
 const SUPABASE_URL  = process.env.SUPABASE_URL ?? '';
 const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
-const BEARER_TOKEN  = process.env.MCP_BEARER_TOKEN ?? '';
+const BEARER_TOKEN  = process.env.MCP_AUTH_TOKEN ?? '';
 
 // In-memory session store (per Vercel instance; resets on cold start — fine for personal use)
 const sessions = new Map();
@@ -202,7 +202,7 @@ export default async function handler(req, res) {
   // Auth check
   const auth = (req.headers['authorization'] ?? '').trim();
   if (!BEARER_TOKEN || auth !== `Bearer ${BEARER_TOKEN}`) {
-    return res.status(401).json({ error: 'Unauthorized — set Authorization: Bearer <MCP_BEARER_TOKEN>' });
+    return res.status(401).json({ error: 'Unauthorized — set Authorization: Bearer <MCP_AUTH_TOKEN>' });
   }
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
