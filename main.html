@@ -566,27 +566,40 @@ body::after {
 .gm-add:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .gm-add:active { transform: translateY(0); }
 
-.gm-recur-btn {
-  padding: 11px 14px;
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  color: var(--text-secondary);
-  font-family: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+.gm-recur-wrap {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none;
+  color: var(--text-secondary); font-size: 13px; font-weight: 600;
   white-space: nowrap;
 }
-.gm-recur-btn:hover {
-  background: rgba(255,255,255,0.07);
-  border-color: rgba(255,255,255,0.18);
-  color: var(--text-primary);
+.gm-recur-wrap:hover { color: var(--text-primary); }
+.gm-recur-track {
+  position: relative;
+  width: 36px; height: 20px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
 }
-.gm-recur-btn.active {
-  background: rgba(99,179,237,0.15);
-  border-color: rgba(99,179,237,0.45);
-  color: #63b3ed;
+.gm-recur-track::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  transition: transform 0.2s, background 0.2s;
 }
+.gm-recur-wrap.active .gm-recur-track {
+  background: rgba(99,179,237,0.35);
+  border-color: rgba(99,179,237,0.6);
+}
+.gm-recur-wrap.active .gm-recur-track::after {
+  transform: translateX(16px);
+  background: #63b3ed;
+}
+.gm-recur-wrap.active { color: #63b3ed; }
 .gm-recur-badge {
   font-size: 11px;
   opacity: 0.55;
@@ -711,7 +724,10 @@ body::after {
       <div class="goal-input-wrap gm-input-wrap">
         <input id="goalInput" class="gm-input" type="text" placeholder="Add a goal for today…" autocomplete="off">
         <button type="button" id="goalAddBtn"  class="gm-add">+ Add</button>
-        <button type="button" id="goalRecurBtn" class="gm-recur-btn" title="Toggle recurring — goal repeats every day">🔁 Daily</button>
+        <label id="goalRecurBtn" class="gm-recur-wrap" title="Toggle recurring — goal repeats every day">
+          <span class="gm-recur-track"></span>
+          <span>🔁 Daily</span>
+        </label>
         <div class="gm-status" id="polishStatus"></div>
       </div>
     </div>
@@ -823,6 +839,8 @@ body::after {
     const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
     return wk + ', ' + mo + ' ' + d.getDate();
   }
+
+  function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
   function todayKey()    { return 'goals:' + getActiveDateString(); }
   function tomorrowKey() { return 'goals:' + getTomorrowDateString(); }
