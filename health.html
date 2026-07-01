@@ -1407,6 +1407,7 @@ main {
     render();
   }, 60 * 1000);
 
+  window.addEventListener('storage', render);
   render();
   startTicker();
 })();

@@ -631,10 +631,14 @@ body::after {
   setInterval(()=>{ if(scrubT==null) renderAll(); }, 60000);
 
   /* ============ Cloud sync ============ */
-  if(window.initCloudSync){
-    window.initCloudSync({ appKey:'caffeine', syncedKeys:[LOGS_KEY,CUSTOM_KEY],
-      onApplied:function(){ logs=loadJSON(LOGS_KEY,[]); custom=loadJSON(CUSTOM_KEY,[]); renderResults($('search').value); renderAll(); } });
-  }
+  // Must be inside DOMContentLoaded — sync.js is defer'd and not yet defined
+  // when this IIFE runs during HTML parsing.
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.initCloudSync) {
+      window.initCloudSync({ appKey: 'caffeine', syncedKeys: [LOGS_KEY, CUSTOM_KEY],
+        onApplied: function () { logs = loadJSON(LOGS_KEY, []); custom = loadJSON(CUSTOM_KEY, []); renderResults($('search').value); renderAll(); } });
+    }
+  });
 })();
 </script>
 </body>

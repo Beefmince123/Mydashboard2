@@ -1092,6 +1092,9 @@ html, body {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  // Re-render when health.html (which owns sync for po_water_v1) applies remote data
+  window.addEventListener('storage', function () { state = loadState(); renderAll(); });
+
   // BOOT
   renderAll();
 })();
@@ -1117,21 +1120,9 @@ html, body {
 }
 </style>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  // When embedded in health.html, the parent owns sync for the 'health'
-  // row — running our own sync here would race and wipe sibling keys.
-  try { if (window.self !== window.top) return; } catch (e) { return; }
-  if (typeof initCloudSync !== 'function') return;
-  initCloudSync({
-    appKey: 'health',
-    syncedKeys: ['po_water_v1'],
-    onApplied: function () {
-      window.dispatchEvent(new Event('storage'));
-    }
-  });
-});
-</script>
+<!-- po_water_v1 is synced as part of health.html's 'health' appKey row.
+     Running a separate sync here with the same appKey would overwrite the
+     entire health row with only water data, losing supplement stack data. -->
 
 </body>
 </html>

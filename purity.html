@@ -619,14 +619,18 @@ body::after {
 
   window.addEventListener('storage', renderAll);
 
-  if (window.initCloudSync) {
-    window.initCloudSync({
-      appKey: 'purity',
-      syncedPrefixes: ['purity:'],
-      syncedKeys: ['purity_archive'],
-      onApplied: renderAll
-    });
-  }
+  // Must be inside DOMContentLoaded — sync.js is defer'd and not yet defined
+  // when this IIFE runs during HTML parsing.
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.initCloudSync) {
+      window.initCloudSync({
+        appKey: 'purity',
+        syncedPrefixes: ['purity:'],
+        syncedKeys: ['purity_archive'],
+        onApplied: renderAll
+      });
+    }
+  });
 })();
 </script>
 </body>
