@@ -625,10 +625,42 @@ select option { background:#1a1a1c; }
   padding:12px 14px; margin-bottom:6px;
   background:rgba(255,255,255,.025); border:1px solid var(--border);
   border-radius:11px; font-size:13px;
+  transition:background .15s, border-color .15s;
 }
+.hist-row.clickable { cursor:pointer; }
+.hist-row.clickable:hover { background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.15); }
 .hist-name { color:var(--text-1); font-weight:600; }
 .hist-meta { color:var(--text-3); font-size:11px; margin-top:2px; }
-.hist-sets { font-family:var(--mono); font-size:12px; color:var(--text-3); }
+.hist-sets { font-family:var(--mono); font-size:12px; color:var(--text-3); white-space:nowrap; }
+.hist-chevron { color:var(--text-3); font-size:14px; margin-left:6px; }
+
+/* ── Workout Detail ──────────────────────── */
+.detail-stats {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+  margin-bottom:14px;
+}
+.detail-stat {
+  background:rgba(255,255,255,.025); border:1px solid var(--border);
+  border-radius:11px; padding:12px 10px; text-align:center;
+}
+.detail-stat-num { font-family:var(--mono); font-size:20px; font-weight:700; color:var(--text-1); }
+.detail-stat-label { font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+.detail-ex {
+  background:rgba(255,255,255,.025); border:1px solid var(--border);
+  border-radius:11px; padding:14px; margin-bottom:10px;
+}
+.detail-ex-name { font-size:14px; font-weight:700; color:var(--text-1); margin-bottom:10px; }
+.detail-set-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 0; border-bottom:1px solid rgba(255,255,255,.05);
+}
+.detail-set-row:last-child { border-bottom:none; }
+.detail-set-label { font-size:12px; color:var(--text-3); }
+.detail-set-val { font-family:var(--mono); font-size:13px; color:var(--text-1); font-weight:600; }
+.hist-month-label {
+  font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--text-3); font-weight:600; padding:18px 0 8px;
+}
 
 .empty-state {
   text-align:center; padding:28px; font-size:13px;
@@ -681,7 +713,11 @@ select option { background:#1a1a1c; }
   <div id="routineList"></div>
   <button class="btn btn-ghost btn-full" id="newRoutineBtn" type="button" style="margin-top:4px">+ New Routine</button>
 
-  <div class="section-label" style="margin-top:24px">Recent Workouts</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-top:24px;margin-bottom:10px">
+    <span style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3);font-weight:600;white-space:nowrap">Recent Workouts</span>
+    <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.07),transparent)"></div>
+    <button class="btn btn-ghost" id="viewAllHistBtn" type="button" style="font-size:11px;padding:3px 10px;white-space:nowrap">All →</button>
+  </div>
   <div id="historyList"></div>
 
   <div class="section-label" style="margin-top:24px">Exercise Progress</div>
@@ -891,6 +927,28 @@ select option { background:#1a1a1c; }
   </div>
 </div>
 
+<!-- ════════════════════════════════════════
+     SCREEN: FULL HISTORY
+════════════════════════════════════════ -->
+<div id="sHistory" class="screen">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+    <button class="btn btn-ghost" id="histBackBtn" type="button">← Back</button>
+    <span style="flex:1;font-size:17px;font-weight:700;color:var(--text-1)">Workout History</span>
+  </div>
+  <div id="historyFullList"></div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN: WORKOUT DETAIL
+════════════════════════════════════════ -->
+<div id="sDetail" class="screen">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+    <button class="btn btn-ghost" id="detailBackBtn" type="button">← Back</button>
+    <span style="flex:1;font-size:17px;font-weight:700;color:var(--text-1)" id="detailTitle"></span>
+  </div>
+  <div id="detailContent"></div>
+</div>
+
 </div><!-- /.page -->
 
 <script>
@@ -974,7 +1032,7 @@ function todaySplitName() { return SPLIT_MAP[new Date().getDay()]; }
 // ═══════════════════════════════════════════════════════
 // SCREEN MANAGER
 // ═══════════════════════════════════════════════════════
-const SCREENS = ['sHome','sEdit','sWorkout','sComplete','sClass'];
+const SCREENS = ['sHome','sEdit','sWorkout','sComplete','sClass','sHistory','sDetail'];
 function showScreen(id) {
   SCREENS.forEach(s => { const el = $(s); if (el) el.classList.toggle('active', s === id); });
   window.scrollTo(0, 0);
@@ -1038,15 +1096,7 @@ function renderHome() {
   if (!logs.length) {
     hist.innerHTML = '<div class="empty-state">No workouts logged yet.</div>';
   } else {
-    hist.innerHTML = logs.map(l => {
-      const isClass = l.classLog;
-      const totalSets = isClass ? '—' : l.exercises.reduce((s, e) => s + e.sets.length, 0) + ' sets';
-      const dur = l.duration ? fmtSecs(l.duration) : (isClass ? 'Attended' : '—');
-      return '<div class="hist-row">' +
-        '<div><div class="hist-name">' + l.routineName + '</div><div class="hist-meta">' + fmtDate(l.date) + ' · ' + dur + '</div></div>' +
-        '<div class="hist-sets">' + totalSets + '</div>' +
-      '</div>';
-    }).join('');
+    hist.innerHTML = logs.map(l => histRowHTML(l)).join('');
   }
 
   renderExerciseProgress();
@@ -1060,6 +1110,128 @@ $('routineList').addEventListener('click', e => {
   if (startBtn) startWorkout(startBtn.dataset.start);
 });
 $('newRoutineBtn').addEventListener('click', () => openEdit(null));
+
+// Clickable hist-rows on home screen
+$('historyList').addEventListener('click', e => {
+  const row = e.target.closest('[data-log-id]');
+  if (row) openWorkoutDetail(row.dataset.logId, 'sHome');
+});
+$('viewAllHistBtn').addEventListener('click', () => openHistory());
+
+// ═══════════════════════════════════════════════════════
+// HISTORY SCREEN
+// ═══════════════════════════════════════════════════════
+
+function histRowHTML(l) {
+  const isClass = l.classLog;
+  const totalSets = isClass ? 'Class' : l.exercises.reduce((s, e) => s + e.sets.length, 0) + ' sets';
+  const dur = l.duration ? fmtSecs(l.duration) : (isClass ? 'Attended' : '—');
+  return '<div class="hist-row clickable" data-log-id="' + l.id + '">' +
+    '<div><div class="hist-name">' + l.routineName + '</div>' +
+    '<div class="hist-meta">' + fmtDate(l.date) + ' · ' + dur + '</div></div>' +
+    '<div style="display:flex;align-items:center;gap:4px">' +
+    '<span class="hist-sets">' + totalSets + '</span>' +
+    '<span class="hist-chevron">›</span></div>' +
+    '</div>';
+}
+
+function openHistory() {
+  const logs = loadLogs().slice().reverse();
+  const el = $('historyFullList');
+  if (!logs.length) {
+    el.innerHTML = '<div class="empty-state">No workouts logged yet.</div>';
+    showScreen('sHistory');
+    return;
+  }
+  // Group by YYYY-MM
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const seen = [];
+  const groups = {};
+  logs.forEach(l => {
+    const d = new Date(l.date);
+    const k = d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+    if (!groups[k]) { groups[k] = { label: MONTHS[d.getMonth()] + ' ' + d.getFullYear(), rows: [] }; seen.push(k); }
+    groups[k].rows.push(l);
+  });
+  el.innerHTML = seen.map(k =>
+    '<div class="hist-month-label">' + groups[k].label + '</div>' +
+    groups[k].rows.map(l => histRowHTML(l)).join('')
+  ).join('');
+  showScreen('sHistory');
+}
+
+$('histBackBtn').addEventListener('click', () => { renderHome(); showScreen('sHome'); });
+
+// Delegated clicks inside full history list
+$('historyFullList').addEventListener('click', e => {
+  const row = e.target.closest('[data-log-id]');
+  if (row) openWorkoutDetail(row.dataset.logId, 'sHistory');
+});
+
+// ═══════════════════════════════════════════════════════
+// WORKOUT DETAIL SCREEN
+// ═══════════════════════════════════════════════════════
+
+let detailFrom = 'sHome';
+
+function openWorkoutDetail(logId, from) {
+  const log = loadLogs().find(l => l.id === logId);
+  if (!log) return;
+  detailFrom = from || 'sHome';
+  $('detailTitle').textContent = log.routineName;
+
+  const el = $('detailContent');
+
+  if (log.classLog) {
+    el.innerHTML = '<div class="detail-ex" style="text-align:center;padding:28px">' +
+      '<div style="font-size:36px;margin-bottom:8px">✅</div>' +
+      '<div class="detail-ex-name">Class Attended</div>' +
+      '<div style="color:var(--text-3);font-size:12px">' + fmtDate(log.date) + '</div>' +
+    '</div>';
+    showScreen('sDetail');
+    return;
+  }
+
+  const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0);
+  const totalVol  = log.exercises.reduce((sum, ex) =>
+    sum + ex.sets.reduce((s2, set) => s2 + (set.weight && set.reps ? set.weight * set.reps : 0), 0), 0);
+  const dur = log.duration ? fmtSecs(log.duration) : '—';
+
+  let html = '<div class="detail-stats">' +
+    '<div class="detail-stat"><div class="detail-stat-num">' + dur + '</div><div class="detail-stat-label">Duration</div></div>' +
+    '<div class="detail-stat"><div class="detail-stat-num">' + totalSets + '</div><div class="detail-stat-label">Sets</div></div>' +
+    '<div class="detail-stat"><div class="detail-stat-num">' + (totalVol > 0 ? Math.round(totalVol).toLocaleString() : '—') + '</div><div class="detail-stat-label">' + (totalVol > 0 ? 'kg Lifted' : 'Volume') + '</div></div>' +
+    '</div>';
+
+  html += '<div style="font-size:12px;color:var(--text-3);margin-bottom:14px">' + fmtDate(log.date) + '</div>';
+
+  log.exercises.forEach(ex => {
+    html += '<div class="detail-ex"><div class="detail-ex-name">' + ex.name + '</div>';
+    ex.sets.forEach((set, i) => {
+      let val;
+      if (ex.type === 'time') {
+        val = fmtSecs(set.secs || 0);
+      } else if (set.weight) {
+        val = set.weight + ' kg × ' + set.reps + ' reps';
+      } else {
+        val = (set.reps || '—') + ' reps';
+      }
+      html += '<div class="detail-set-row">' +
+        '<span class="detail-set-label">Set ' + (i + 1) + '</span>' +
+        '<span class="detail-set-val">' + val + '</span>' +
+        '</div>';
+    });
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+  showScreen('sDetail');
+}
+
+$('detailBackBtn').addEventListener('click', () => {
+  if (detailFrom === 'sHistory') { openHistory(); }
+  else { renderHome(); showScreen('sHome'); }
+});
 
 // ═══════════════════════════════════════════════════════
 // EDIT SCREEN
