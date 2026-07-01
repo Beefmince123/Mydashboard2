@@ -74,7 +74,9 @@
       if (!remote || typeof remote !== 'object') return false;
       suppressSync = true;
       let changed = false;
+      let hasLocalOnly = false;
       try {
+        // Apply remote keys to local
         for (const k of Object.keys(remote)) {
           if (!matches(k)) continue;
           const incoming = JSON.stringify(remote[k]);
@@ -83,12 +85,14 @@
             try { origSet(k, incoming); changed = true; } catch (e) {}
           }
         }
+        // Don't delete local keys missing from remote — they may exist only on
+        // this device and haven't been pushed yet. Schedule a push so they
+        // get uploaded rather than silently wiped.
         for (const k of listAllKeys()) {
-          if (!(k in remote)) {
-            try { origRemove(k); changed = true; } catch (e) {}
-          }
+          if (!(k in remote)) { hasLocalOnly = true; break; }
         }
       } finally { suppressSync = false; }
+      if (hasLocalOnly) setTimeout(schedulePush, 500);
       if (changed && typeof onApplied === 'function') {
         try { onApplied(); } catch (e) {}
       }
