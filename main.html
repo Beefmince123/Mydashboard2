@@ -566,19 +566,33 @@ body::after {
 .gm-add:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .gm-add:active { transform: translateY(0); }
 
-.gm-polish {
-  padding: 11px 18px;
+.gm-recur-btn {
+  padding: 11px 14px;
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 12px;
   background: rgba(255,255,255,0.04);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-family: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
 }
-.gm-polish:hover {
+.gm-recur-btn:hover {
   background: rgba(255,255,255,0.07);
   border-color: rgba(255,255,255,0.18);
+  color: var(--text-primary);
+}
+.gm-recur-btn.active {
+  background: rgba(99,179,237,0.15);
+  border-color: rgba(99,179,237,0.45);
+  color: #63b3ed;
+}
+.gm-recur-badge {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-left: 4px;
+  cursor: default;
+  user-select: none;
 }
 
 .gm-status {
@@ -696,8 +710,8 @@ body::after {
       <button type="button" id="gmPushBtn" class="gm-push-btn" style="display:none;">Push remaining to tomorrow</button>
       <div class="goal-input-wrap gm-input-wrap">
         <input id="goalInput" class="gm-input" type="text" placeholder="Add a goal for today…" autocomplete="off">
-        <button type="button" id="goalAddBtn"    class="gm-add">+ Add</button>
-        <button type="button" id="goalPolishBtn" class="gm-polish">✨ Polish</button>
+        <button type="button" id="goalAddBtn"  class="gm-add">+ Add</button>
+        <button type="button" id="goalRecurBtn" class="gm-recur-btn" title="Toggle recurring — goal repeats every day">🔁 Daily</button>
         <div class="gm-status" id="polishStatus"></div>
       </div>
     </div>
@@ -715,8 +729,7 @@ body::after {
       <div id="tomorrowEmpty" class="empty-state">Nothing planned for tomorrow yet</div>
       <div class="goal-input-wrap gm-input-wrap">
         <input id="tomorrowInput" class="gm-input" type="text" placeholder="Add a goal for tomorrow…" autocomplete="off">
-        <button type="button" id="tomorrowAddBtn"    class="gm-add">+ Add</button>
-        <button type="button" id="tomorrowPolishBtn" class="gm-polish">✨ Polish</button>
+        <button type="button" id="tomorrowAddBtn" class="gm-add">+ Add</button>
         <div class="gm-status" id="tomorrowStatus"></div>
       </div>
     </div>
@@ -760,9 +773,6 @@ body::after {
 <script>
 (function () {
   'use strict';
-
-  // Paste your Anthropic key here to enable ✨ Polish. Empty = falls back to plain add.
-  const ANTHROPIC_API_KEY = '';
 
   const _dow = new Date().getDay(); // 0=Sun, 6=Sat
   const WAKE_HOUR  = (_dow === 0 || _dow === 6) ? 7.5 : 6.5; // 7:30 weekends, 6:30 weekdays
@@ -822,6 +832,25 @@ body::after {
     return Array.isArray(g) ? g : [];
   }
   function setGoals(key, list) { storeSet(key, list); }
+
+  // ---------- recurring goals ----------
+  const RECUR_KEY = 'goals_recurring';
+  function getRecurringGoals() {
+    const g = storeGet(RECUR_KEY);
+    return Array.isArray(g) ? g : [];
+  }
+  function setRecurringGoals(list) { storeSet(RECUR_KEY, list); }
+
+  function injectRecurringGoals() {
+    const recurring = getRecurringGoals();
+    if (!recurring.length) return;
+    const today = getGoals(todayKey());
+    const existingIds = new Set(today.filter(g => g.recurringId).map(g => g.recurringId));
+    const toAdd = recurring.filter(r => !existingIds.has(r.id));
+    if (!toAdd.length) return;
+    const injected = toAdd.map(r => ({ text: r.text, done: false, recurringId: r.id }));
+    setGoals(todayKey(), [...injected, ...today]);
+  }
 
   // ---------- rollover: pull undone older goals into today ----------
   function rollover() {
@@ -1132,6 +1161,14 @@ body::after {
     li.appendChild(text);
     makeInlineEdit(text, null, idx, key, reload);
 
+    if (goal.recurringId) {
+      const badge = document.createElement('span');
+      badge.className = 'gm-recur-badge';
+      badge.textContent = '🔁';
+      badge.title = 'Daily recurring — tap × to remove';
+      li.appendChild(badge);
+    }
+
     const queueBtn = document.createElement('button');
     queueBtn.type = 'button';
     queueBtn.className = 'gm-queue-btn' + (goal.queued ? ' gm-queue-active' : '');
@@ -1155,6 +1192,10 @@ body::after {
     del.textContent = '×';
     del.addEventListener('click', () => {
       const list = getGoals(key);
+      const g = list[idx];
+      if (g && g.recurringId) {
+        setRecurringGoals(getRecurringGoals().filter(r => r.id !== g.recurringId));
+      }
       list.splice(idx, 1);
       setGoals(key, list);
       reload();
@@ -1245,6 +1286,7 @@ body::after {
   }
 
   function loadToday() {
+    injectRecurringGoals();
     const goals = getGoals(todayKey());
     renderListInto(goals, document.getElementById('goalList'), document.getElementById('emptyState'), todayKey(), false);
   }
@@ -1277,37 +1319,20 @@ body::after {
     el._t = setTimeout(() => { el.textContent = ''; el.classList.remove('gm-status-error'); }, 3500);
   }
 
-  async function polishOne(text) {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content:
-            'Rewrite this single goal so it is concrete, action-oriented, and under 60 characters. ' +
-            'Return ONLY a JSON array with exactly one string, no preamble, no code fences.\n\nGoal: ' + text
-        }]
-      })
-    });
-    const data = await res.json();
-    const content = (data && data.content && data.content[0] && data.content[0].text) || '';
-    const arr = JSON.parse(content);
-    if (!Array.isArray(arr) || arr.length < 1 || typeof arr[0] !== 'string') throw new Error('bad response');
-    return arr[0].trim();
-  }
-
-  function makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload) {
+  function makeAddHandlers(input, addBtn, key, reload, recurBtn) {
     function plainAdd(text) {
+      const asRecurring = recurBtn && recurBtn.classList.contains('active');
       const list = getGoals(key);
-      list.push({ text, done: false });
+      const goalObj = { text, done: false };
+      if (asRecurring) {
+        const rList = getRecurringGoals();
+        const id = uid();
+        goalObj.recurringId = id;
+        rList.push({ id, text });
+        setRecurringGoals(rList);
+        recurBtn.classList.remove('active');
+      }
+      list.push(goalObj);
       setGoals(key, list);
       input.value = '';
       reload();
@@ -1320,42 +1345,24 @@ body::after {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
     });
-    polishBtn.addEventListener('click', async () => {
-      const text = input.value.trim();
-      if (!text) return;
-      if (!ANTHROPIC_API_KEY) {
-        plainAdd(text);
-        showStatus(statusEl, 'Polish needs an Anthropic API key — added as-typed.', false);
-        return;
-      }
-      polishBtn.disabled = true;
-      try {
-        const polished = await polishOne(text);
-        plainAdd(polished);
-      } catch (e) {
-        plainAdd(text);
-        showStatus(statusEl, 'Polish failed — added as-typed.', true);
-      } finally {
-        polishBtn.disabled = false;
-      }
-    });
+    if (recurBtn) {
+      recurBtn.addEventListener('click', () => recurBtn.classList.toggle('active'));
+    }
   }
 
   makeAddHandlers(
     document.getElementById('goalInput'),
     document.getElementById('goalAddBtn'),
-    document.getElementById('goalPolishBtn'),
     todayKey(),
-    document.getElementById('polishStatus'),
-    loadToday
+    loadToday,
+    document.getElementById('goalRecurBtn')
   );
   makeAddHandlers(
     document.getElementById('tomorrowInput'),
     document.getElementById('tomorrowAddBtn'),
-    document.getElementById('tomorrowPolishBtn'),
     tomorrowKey(),
-    document.getElementById('tomorrowStatus'),
-    loadTomorrow
+    loadTomorrow,
+    null
   );
 
   // ====== Monthly Goals ======
@@ -1534,6 +1541,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (typeof initCloudSync !== 'function') return;
   initCloudSync({
     appKey: 'goals',
+    syncedKeys: ['goals_recurring'],
     syncedPrefixes: ['goals:', 'monthly_goals:'],
     onApplied: function () {
       window.dispatchEvent(new CustomEvent('goals-changed'));
